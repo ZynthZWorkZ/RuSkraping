@@ -388,14 +388,7 @@
             <StatusBar Grid.Row="2" Background="#1A1A1A">
                 <StatusBarItem>
                     <StackPanel Orientation="Horizontal">
-                        <ProgressBar x:Name="SearchLoadingSpinner" Style="{StaticResource LoadingSpinnerStyle}" Margin="0,0,10,0" Visibility="Visible"/>
                         <TextBlock x:Name="StatusText" Text="Ready" Foreground="#CCCCCC"/>
-                    </StackPanel>
-                </StatusBarItem>
-                <StatusBarItem HorizontalAlignment="Right">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="SearchProgressText" Text="0%" Foreground="#CCCCCC" Margin="0,0,10,0"/>
-                        <ProgressBar x:Name="SearchProgress" Width="200" Height="6" Visibility="Visible"/>
                     </StackPanel>
                 </StatusBarItem>
             </StatusBar>

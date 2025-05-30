@@ -35,16 +35,24 @@ public partial class MainWindow : Window
         ResultsListView.ItemsSource = searchResults;
         pauseEvent = new ManualResetEvent(true);
         
-        try
+        // Initialize driver on a background thread
+        Task.Run(() =>
         {
-            InitializeChromeDriver();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Failed to initialize Chrome driver: {ex.Message}\n\nPlease make sure Chrome is installed and up to date.", 
-                "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            Application.Current.Shutdown();
-        }
+            try
+            {
+                InitializeChromeDriver();
+            }
+            catch (Exception ex)
+            {
+                // Show error message on the UI thread
+                Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show($"Failed to initialize Chrome driver: {ex.Message}\n\nPlease make sure Chrome is installed and up to date.",
+                        "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Application.Current.Shutdown();
+                });
+            }
+        });
     }
 
     private void InitializeChromeDriver()
@@ -83,45 +91,62 @@ public partial class MainWindow : Window
 
     private async void SearchButton_Click(object sender, RoutedEventArgs e)
     {
+        // Access UI elements on the UI thread
         if (string.IsNullOrWhiteSpace(SearchTextBox.Text))
         {
             MessageBox.Show("Please enter a search query.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        try
-        {
-            SearchButton.IsEnabled = false;
-            PauseButton.IsEnabled = true;
-            StopButton.IsEnabled = true;
-            SearchProgress.Visibility = Visibility.Visible;
-            SearchLoadingSpinner.Visibility = Visibility.Visible;
-            SearchProgressText.Text = "0%";
-            SearchProgress.Value = 0;
-            searchCancellation = new CancellationTokenSource();
-            isPaused = false;
-            pauseEvent.Set();
+        // Access UI elements on the UI thread
+        SearchButton.IsEnabled = false;
+        PauseButton.IsEnabled = true;
+        StopButton.IsEnabled = true;
+        searchCancellation = new CancellationTokenSource();
+        isPaused = false;
+        pauseEvent.Set();
 
-            await PerformSearch(searchCancellation.Token);
-        }
-        catch (OperationCanceledException)
+        // Create and show progress window on UI thread
+        var progressWindow = new Progress();
+        progressWindow.Owner = this;
+        progressWindow.Show();
+        progressWindow.StartFakeAnimation();
+
+        // Run the search in a background thread
+        await Task.Run(async () =>
         {
-            StatusText.Text = "Search stopped.";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            SearchButton.IsEnabled = true;
-            PauseButton.IsEnabled = false;
-            StopButton.IsEnabled = false;
-            SearchProgress.Visibility = Visibility.Collapsed;
-            SearchLoadingSpinner.Visibility = Visibility.Collapsed;
-            SearchProgressText.Text = "";
-            SearchProgress.Value = 0;
-        }
+            try
+            {
+                await PerformSearch(searchCancellation.Token, progressWindow);
+            }
+            catch (OperationCanceledException)
+            {
+                // Update status text on UI thread
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    StatusText.Text = "Search stopped.";
+                });
+            }
+            catch (Exception ex)
+            {
+                // Show error message on UI thread
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            }
+            finally
+            {
+                // Update UI elements and close window on UI thread
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    SearchButton.IsEnabled = true;
+                    PauseButton.IsEnabled = false;
+                    StopButton.IsEnabled = false;
+                    progressWindow.Close();
+                });
+            }
+        });
     }
 
     private void PauseButton_Click(object sender, RoutedEventArgs e)
@@ -132,7 +157,6 @@ public partial class MainWindow : Window
             pauseEvent.Reset();
             PauseButton.Content = "Resume";
             StatusText.Text = "Search paused...";
-            SearchLoadingSpinner.Visibility = Visibility.Collapsed;
         }
         else
         {
@@ -140,7 +164,6 @@ public partial class MainWindow : Window
             pauseEvent.Set();
             PauseButton.Content = "Pause";
             StatusText.Text = "Resuming search...";
-            SearchLoadingSpinner.Visibility = Visibility.Visible;
         }
     }
 
@@ -149,117 +172,157 @@ public partial class MainWindow : Window
         searchCancellation?.Cancel();
         pauseEvent.Set(); // Ensure we're not stuck in a pause
         StatusText.Text = "Stopping search...";
-        SearchLoadingSpinner.Visibility = Visibility.Collapsed;
     }
 
-    private async Task PerformSearch(CancellationToken cancellationToken)
+    private async Task PerformSearch(CancellationToken cancellationToken, Progress progressWindow)
     {
-        searchResults.Clear();
-        StatusText.Text = "Searching...";
-        GetMagnetButton.IsEnabled = false;
-        OpenMagnetButton.IsEnabled = false;
-        SearchProgress.Visibility = Visibility.Visible;
-        SearchLoadingSpinner.Visibility = Visibility.Visible;
-        SearchProgress.Value = 0;
-        SearchProgressText.Text = "0%";
+        // Clear search results and update status on UI thread
+        await Dispatcher.InvokeAsync(() =>
+        {
+            searchResults.Clear();
+            StatusText.Text = "Searching...";
+            GetMagnetButton.IsEnabled = false;
+            OpenMagnetButton.IsEnabled = false;
+        });
 
         try
         {
-            // First visit the domain to set cookies
-            driver.Navigate().GoToUrl("https://rutracker.org");
+            // Selenium operations on background thread
+            await Task.Run(() => driver.Navigate().GoToUrl("https://rutracker.org"));
 
             // Load and set cookies if enabled
-            if (UseCookiesCheckBox.IsChecked == true)
+            // Accessing UseCookiesCheckBox needs to be on the UI thread
+            bool useCookies = await Dispatcher.InvokeAsync(() => UseCookiesCheckBox.IsChecked == true);
+
+            if (useCookies)
             {
                 var cookies = LoadCookiesFromFile("rutackercookies.txt");
-                foreach (var cookie in cookies)
+                // Adding cookies to driver on background thread
+                await Task.Run(() =>
                 {
-                    driver.Manage().Cookies.AddCookie(new Cookie(cookie.Key, cookie.Value));
-                }
+                    foreach (var cookie in cookies)
+                    {
+                        driver.Manage().Cookies.AddCookie(new Cookie(cookie.Key, cookie.Value));
+                    }
+                });
             }
 
-            // Construct the target URL
+            // Construct the target URL - SearchTextBox access on UI thread
             string baseUrl = "https://rutracker.org/forum/tracker.php?nm=";
-            string encodedSearch = HttpUtility.UrlEncode(SearchTextBox.Text);
+            string searchText = await Dispatcher.InvokeAsync(() => SearchTextBox.Text);
+            string encodedSearch = HttpUtility.UrlEncode(searchText);
             string targetUrl = baseUrl + encodedSearch;
 
-            // Visit the first page
-            driver.Navigate().GoToUrl(targetUrl);
+            // Visit the first page on background thread
+            await Task.Run(() => driver.Navigate().GoToUrl(targetUrl));
 
-            // Get total number of pages
-            int totalPages = GetTotalPages(driver);
-            StatusText.Text = $"Found {totalPages} pages of results";
+            // Get total number of pages on background thread
+            int totalPages = await Task.Run(() => GetTotalPages(driver));
+            // Update status text on UI thread
+            await Dispatcher.InvokeAsync(() => StatusText.Text = $"Found {totalPages} pages of results");
 
             // Process each page
             for (int pageNum = 1; pageNum <= totalPages; pageNum++)
             {
+                // Check for cancellation and pause on background thread
+                if (progressWindow.IsCancelled)
+                {
+                    throw new OperationCanceledException();
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
                 pauseEvent.WaitOne(); // Wait if paused
 
-                StatusText.Text = $"Processing page {pageNum} of {totalPages}...";
+                // StatusText update on UI thread
+                await Dispatcher.InvokeAsync(() => StatusText.Text = $"Processing page {pageNum} of {totalPages}...");
                 double progress = (double)pageNum / totalPages * 100;
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    SearchProgress.Value = progress;
-                    SearchProgressText.Text = $"{progress:F0}%";
-                });
+                // progressWindow.UpdateProgress is designed to be thread-safe and uses Dispatcher.Invoke internally
+                progressWindow.UpdateProgress(progress, $"Processing page {pageNum} of {totalPages}");
 
-                // Extract titles from current page
-                var pageResults = ExtractTitles(driver);
+                // Extract titles from current page on background thread
+                var pageResults = await Task.Run(() => ExtractTitles(driver));
+                // Add results to searchResults (ObservableCollection) on UI thread
                 foreach (var result in pageResults)
                 {
                     await Dispatcher.InvokeAsync(() => searchResults.Add(result));
                 }
 
-                // If this isn't the last page, go to the next page
+                // If this isn't the last page, go to the next page on background thread
                 if (pageNum < totalPages)
                 {
-                    if (!GoToPage(driver, pageNum + 1))
+                    bool success = await Task.Run(() => GoToPage(driver, pageNum + 1));
+                    if (!success)
                     {
-                        StatusText.Text = $"Failed to go to page {pageNum + 1}";
+                        // Update status text on UI thread
+                        await Dispatcher.InvokeAsync(() => StatusText.Text = $"Failed to go to page {pageNum + 1}");
                         break;
                     }
-                    await Task.Delay(1000, cancellationToken); // Small delay between pages
+                    // Small delay on background thread
+                    await Task.Delay(1000, cancellationToken);
                 }
             }
 
-            StatusText.Text = $"Search complete. Found {searchResults.Count} results.";
+            // Update status text on UI thread
+            await Dispatcher.InvokeAsync(() => StatusText.Text = $"Search complete. Found {searchResults.Count} results.");
             
-            // Only fetch images if the checkbox is checked
-            if (FetchImagesCheckBox.IsChecked == true)
+            // Only fetch images if the checkbox is checked - FetchImagesCheckBox access on UI thread
+            bool fetchImages = await Dispatcher.InvokeAsync(() => FetchImagesCheckBox.IsChecked == true);
+
+            if (fetchImages)
             {
-                StatusText.Text = $"Search complete. Found {searchResults.Count} results. Fetching images...";
-                await FetchImagesForResults(cancellationToken);
+                // Update status text on UI thread
+                await Dispatcher.InvokeAsync(() => StatusText.Text = $"Search complete. Found {searchResults.Count} results. Fetching images...");
+                // progressWindow.UpdateProgress is thread-safe
+                progressWindow.UpdateProgress(0, "Fetching images...");
+                await FetchImagesForResults(cancellationToken, progressWindow);
             }
 
-            StatusText.Text = $"Search complete. Found {searchResults.Count} results.";
+            // Update status text on UI thread
+            await Dispatcher.InvokeAsync(() => StatusText.Text = $"Search complete. Found {searchResults.Count} results.");
         }
         finally
         {
-            GetMagnetButton.IsEnabled = true;
-            OpenMagnetButton.IsEnabled = true;
-            SearchProgress.Value = 0;
-            SearchProgressText.Text = "";
-            SearchProgress.Visibility = Visibility.Collapsed;
-            SearchLoadingSpinner.Visibility = Visibility.Collapsed;
+            // Update UI elements and close window on UI thread
+            await Dispatcher.InvokeAsync(() =>
+            {
+                GetMagnetButton.IsEnabled = true;
+                OpenMagnetButton.IsEnabled = true;
+                progressWindow.Close();
+            });
         }
     }
 
-    private async Task FetchImagesForResults(CancellationToken cancellationToken)
+    private async Task FetchImagesForResults(CancellationToken cancellationToken, Progress progressWindow)
     {
         var tasks = new List<Task>();
+        // Accessing searchResults.Count needs to be on the UI thread
+        int totalResults = await Dispatcher.InvokeAsync(() => searchResults.Count);
+        int processedResults = 0;
+
         foreach (var result in searchResults)
         {
-            if (cancellationToken.IsCancellationRequested) break;
+            if (cancellationToken.IsCancellationRequested || progressWindow.IsCancelled) break;
             
-            tasks.Add(FetchImageForResult(result, cancellationToken));
+            // Fetching image for result should be on background thread
+            tasks.Add(Task.Run(async () =>
+            {
+                await FetchImageForResult(result, cancellationToken);
+                // Updating processedResults and progress needs to be on UI thread for accurate display
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    processedResults++;
+                    double progress = (double)processedResults / totalResults * 100;
+                    progressWindow.UpdateProgress(progress, $"Fetching image {processedResults} of {totalResults}");
+                });
+            }));
             
-            // Process in batches of 5 to avoid overwhelming the browser
+            // Process in batches to avoid overwhelming the browser
             if (tasks.Count >= 5)
             {
                 await Task.WhenAll(tasks);
                 tasks.Clear();
-                await Task.Delay(500, cancellationToken); // Small delay between batches
+                // Small delay on background thread
+                await Task.Delay(500, cancellationToken);
             }
         }
         
@@ -274,18 +337,26 @@ public partial class MainWindow : Window
     {
         try
         {
-            // Navigate to the result's page
-            driver.Navigate().GoToUrl(result.Link);
+            // Navigate to the result's page on background thread
+            await Task.Run(() => driver.Navigate().GoToUrl(result.Link));
             
-            // Wait for the page to load
+            // Wait for the page to load and find element on background thread
             var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-            
-            // Try to find the image with the specified class
-            var imageElement = wait.Until(d => 
+            var imageElement = await Task.Run(() =>
             {
                 try
                 {
-                    return d.FindElement(By.CssSelector("img.postImg.postImgAligned.img-right"));
+                    return wait.Until(d => 
+                    {
+                        try
+                        {
+                            return d.FindElement(By.CssSelector("img.postImg.postImgAligned.img-right"));
+                        }
+                        catch
+                        {
+                            return null;
+                        }
+                    });
                 }
                 catch
                 {
@@ -295,9 +366,11 @@ public partial class MainWindow : Window
 
             if (imageElement != null)
             {
-                string imageUrl = imageElement.GetAttribute("src");
+                // Get attribute on background thread
+                string imageUrl = await Task.Run(() => imageElement.GetAttribute("src"));
                 if (!string.IsNullOrEmpty(imageUrl))
                 {
+                    // Updating SearchResult.ImageUrl needs to be on UI thread as SearchResult is in ObservableCollection
                     await Dispatcher.InvokeAsync(() =>
                     {
                         result.ImageUrl = imageUrl;
@@ -312,8 +385,123 @@ public partial class MainWindow : Window
         }
     }
 
+    private string ExtractMagnetLink(IWebDriver driver)
+    {
+        try
+        {
+            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
+            // Finding element on background thread
+            var magnetLinkElement = wait.Until(d => d.FindElement(By.CssSelector("a.magnet-link")));
+            // Getting attribute on background thread
+            return magnetLinkElement.GetAttribute("href") ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            // MessageBox.Show needs to be on UI thread
+            Dispatcher.Invoke(() => MessageBox.Show($"Error extracting magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+            return string.Empty;
+        }
+    }
+
+    private int GetTotalPages(IWebDriver driver)
+    {
+        try
+        {
+            // Finding elements on background thread
+            var pageLinks = driver.FindElements(By.CssSelector("a.pg[href*='start=']"));
+            if (!pageLinks.Any())
+                return 1;
+
+            int maxPage = 1;
+            foreach (var link in pageLinks)
+            {
+                // Accessing link.Text needs to be on background thread if link element is from background thread
+                if (int.TryParse(link.Text, out int pageNum))
+                {
+                    maxPage = Math.Max(maxPage, pageNum);
+                }
+            }
+            return maxPage;
+        }
+        catch
+        {
+            return 1;
+        }
+    }
+
+    private bool GoToPage(IWebDriver driver, int pageNum)
+    {
+        try
+        {
+            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
+            // Finding elements on background thread
+            var pageLinks = driver.FindElements(By.CssSelector("a.pg[href*='start=']"));
+            // Finding target link on background thread
+            var targetLink = pageLinks.FirstOrDefault(link => link.Text == pageNum.ToString());
+
+            if (targetLink == null)
+            {
+                // StatusText update was already handled on UI thread in PerformSearch
+                return false;
+            }
+
+            // Scroll the link into view on background thread
+            ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].scrollIntoView(true);", targetLink);
+            System.Threading.Thread.Sleep(500); // Small delay on background thread
+
+            // Click the link on background thread
+            targetLink.Click();
+
+            // Wait for the page to load on background thread
+            wait.Until(d => d.FindElements(By.CssSelector("div.wbr.t-title a.tLink")).Any());
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // MessageBox.Show needs to be on UI thread
+            Dispatcher.Invoke(() => MessageBox.Show($"Error going to page {pageNum}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+            return false;
+        }
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        searchCancellation?.Cancel();
+        pauseEvent?.Dispose();
+        // Quitting the driver needs to be on a background thread if it was initialized there
+        Task.Run(() => driver?.Quit());
+    }
+
+    private void Grid_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    // Add Magnet Link related methods here if needed, ensuring thread safety.
+    // For example, if GetMagnetButton_Click and OpenMagnetButton_Click interact with
+    // searchResults or driver, they should use Dispatcher.Invoke/InvokeAsync or Task.Run.
+    // Looking at the existing code, GetMagnetButton_Click and OpenMagnetButton_Click
+    // already seem to be interacting with driver and currentMagnetLink (which isn't UI).
+    // We should ensure GetMagnetButton_Click's driver interaction is backgrounded and
+    // MessageBox.Show is UI-threaded.
+
     private async void GetMagnetButton_Click(object sender, RoutedEventArgs e)
     {
+        // Access UI elements on UI thread
         if (ResultsListView.SelectedItem == null)
         {
             MessageBox.Show("Please select a result first.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -321,41 +509,63 @@ public partial class MainWindow : Window
         }
 
         var selectedResult = (SearchResult)ResultsListView.SelectedItem;
+        
+        // Update UI elements on UI thread
         StatusText.Text = "Getting magnet link...";
         GetMagnetButton.IsEnabled = false;
         OpenMagnetButton.IsEnabled = false;
 
         try
         {
-            // Navigate to the topic page
-            driver.Navigate().GoToUrl(selectedResult.Link);
-            
-            // Wait for and extract the magnet link
-            currentMagnetLink = ExtractMagnetLink(driver);
-            if (!string.IsNullOrEmpty(currentMagnetLink))
+            // Selenium operations on background thread
+            string magnetLink = await Task.Run(() => ExtractMagnetLinkForSelection(selectedResult));
+
+            if (!string.IsNullOrEmpty(magnetLink))
             {
-                Clipboard.SetText(currentMagnetLink);
-                StatusText.Text = "Magnet link copied to clipboard!";
-                OpenMagnetButton.IsEnabled = true;
+                currentMagnetLink = magnetLink;
+                // Set clipboard text and update status on UI thread
+                Dispatcher.Invoke(() =>
+                {
+                    Clipboard.SetText(currentMagnetLink);
+                    StatusText.Text = "Magnet link copied to clipboard!";
+                    OpenMagnetButton.IsEnabled = true;
+                });
             }
             else
             {
-                StatusText.Text = "Could not find magnet link.";
+                // Update status on UI thread
+                Dispatcher.Invoke(() => StatusText.Text = "Could not find magnet link.");
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Error getting magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            StatusText.Text = "Error getting magnet link.";
+            // Show error message and update status on UI thread
+            Dispatcher.Invoke(() =>
+            {
+                MessageBox.Show($"Error getting magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Error getting magnet link.";
+            });
         }
         finally
         {
-            GetMagnetButton.IsEnabled = true;
+            // Update UI element on UI thread
+            Dispatcher.Invoke(() => GetMagnetButton.IsEnabled = true);
         }
+    }
+
+    // Helper method to extract magnet link for a specific result on a background thread
+    private string ExtractMagnetLinkForSelection(SearchResult selectedResult)
+    {
+         // Navigate to the topic page on background thread
+        driver.Navigate().GoToUrl(selectedResult.Link);
+        
+        // Wait for and extract the magnet link on background thread
+        return ExtractMagnetLink(driver);
     }
 
     private void OpenMagnetButton_Click(object sender, RoutedEventArgs e)
     {
+        // Access currentMagnetLink (not a UI element, so no dispatcher needed)
         if (string.IsNullOrEmpty(currentMagnetLink))
         {
             MessageBox.Show("No magnet link available.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -364,15 +574,18 @@ public partial class MainWindow : Window
 
         try
         {
+            // Starting a process doesn't typically need dispatcher unless it interacts with UI elements immediately after.
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = currentMagnetLink,
                 UseShellExecute = true
             });
+            // Update status on UI thread
             StatusText.Text = "Opening magnet link...";
         }
         catch (Exception ex)
         {
+            // Show error message on UI thread
             MessageBox.Show($"Could not open magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -416,103 +629,6 @@ public partial class MainWindow : Window
         }
 
         return results;
-    }
-
-    private string ExtractMagnetLink(IWebDriver driver)
-    {
-        try
-        {
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-            var magnetLink = wait.Until(d => d.FindElement(By.CssSelector("a.magnet-link")));
-            return magnetLink.GetAttribute("href") ?? string.Empty;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Error extracting magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            return string.Empty;
-        }
-    }
-
-    private int GetTotalPages(IWebDriver driver)
-    {
-        try
-        {
-            var pageLinks = driver.FindElements(By.CssSelector("a.pg[href*='start=']"));
-            if (!pageLinks.Any())
-                return 1;
-
-            int maxPage = 1;
-            foreach (var link in pageLinks)
-            {
-                if (int.TryParse(link.Text, out int pageNum))
-                {
-                    maxPage = Math.Max(maxPage, pageNum);
-                }
-            }
-            return maxPage;
-        }
-        catch
-        {
-            return 1;
-        }
-    }
-
-    private bool GoToPage(IWebDriver driver, int pageNum)
-    {
-        try
-        {
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-            var pageLinks = driver.FindElements(By.CssSelector("a.pg[href*='start=']"));
-            var targetLink = pageLinks.FirstOrDefault(link => link.Text == pageNum.ToString());
-
-            if (targetLink == null)
-            {
-                StatusText.Text = $"Could not find link for page {pageNum}";
-                return false;
-            }
-
-            // Scroll the link into view
-            ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].scrollIntoView(true);", targetLink);
-            System.Threading.Thread.Sleep(500); // Small delay to ensure scroll completes
-
-            // Click the link
-            targetLink.Click();
-
-            // Wait for the page to load
-            wait.Until(d => d.FindElements(By.CssSelector("div.wbr.t-title a.tLink")).Any());
-            return true;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Error going to page {pageNum}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            return false;
-        }
-    }
-
-    protected override void OnClosing(CancelEventArgs e)
-    {
-        base.OnClosing(e);
-        searchCancellation?.Cancel();
-        pauseEvent?.Dispose();
-        driver?.Quit();
-    }
-
-    private void Grid_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.LeftButton == MouseButtonState.Pressed)
-        {
-            DragMove();
-        }
-    }
-
-    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
-    {
-        WindowState = WindowState.Minimized;
-    }
-
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        Close();
     }
 }
 
