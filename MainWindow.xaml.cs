@@ -39,24 +39,25 @@ public partial class MainWindow : Window
         Task.Run(() =>
         {
             try
-            {
-                InitializeChromeDriver();
-            }
-            catch (Exception ex)
+        {
+            InitializeChromeDriver();
+        }
+        catch (Exception ex)
             {
                 // Show error message on the UI thread
                 Dispatcher.Invoke(() =>
-                {
-                    MessageBox.Show($"Failed to initialize Chrome driver: {ex.Message}\n\nPlease make sure Chrome is installed and up to date.",
-                        "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    Application.Current.Shutdown();
+        {
+            MessageBox.Show($"Failed to initialize Chrome driver: {ex.Message}\n\nPlease make sure Chrome is installed and up to date.", 
+                "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Application.Current.Shutdown();
                 });
-            }
+        }
         });
     }
 
     private void InitializeChromeDriver()
     {
+        ChromeDriver tempDriver = null;
         var options = new ChromeOptions();
         options.AddArgument("--headless=new");
         options.AddArgument("--disable-gpu");
@@ -79,12 +80,16 @@ public partial class MainWindow : Window
 
         try
         {
-            driver = new ChromeDriver(service, options);
-            driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(10);
-            driver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(30);
+            tempDriver = new ChromeDriver(service, options);
+            tempDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(10);
+            tempDriver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(30);
+            driver = tempDriver; // Assign to the field only after successful creation and setup
         }
         catch (WebDriverException ex)
         {
+            // Dispose of tempDriver if it was created before the exception
+            tempDriver?.Quit();
+            tempDriver?.Dispose();
             throw new Exception($"Chrome driver initialization failed: {ex.Message}", ex);
         }
     }
@@ -99,12 +104,12 @@ public partial class MainWindow : Window
         }
 
         // Access UI elements on the UI thread
-        SearchButton.IsEnabled = false;
-        PauseButton.IsEnabled = true;
-        StopButton.IsEnabled = true;
-        searchCancellation = new CancellationTokenSource();
-        isPaused = false;
-        pauseEvent.Set();
+            SearchButton.IsEnabled = false;
+            PauseButton.IsEnabled = true;
+            StopButton.IsEnabled = true;
+            searchCancellation = new CancellationTokenSource();
+            isPaused = false;
+            pauseEvent.Set();
 
         // Create and show progress window on UI thread
         var progressWindow = new Progress();
@@ -118,31 +123,31 @@ public partial class MainWindow : Window
             try
             {
                 await PerformSearch(searchCancellation.Token, progressWindow);
-            }
-            catch (OperationCanceledException)
+        }
+        catch (OperationCanceledException)
             {
                 // Update status text on UI thread
                 await Dispatcher.InvokeAsync(() =>
-                {
-                    StatusText.Text = "Search stopped.";
+        {
+            StatusText.Text = "Search stopped.";
                 });
-            }
-            catch (Exception ex)
+        }
+        catch (Exception ex)
             {
                 // Show error message on UI thread
                 await Dispatcher.InvokeAsync(() =>
-                {
-                    MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        {
+            MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 });
-            }
-            finally
+        }
+        finally
             {
                 // Update UI elements and close window on UI thread
                 await Dispatcher.InvokeAsync(() =>
-                {
-                    SearchButton.IsEnabled = true;
-                    PauseButton.IsEnabled = false;
-                    StopButton.IsEnabled = false;
+        {
+            SearchButton.IsEnabled = true;
+            PauseButton.IsEnabled = false;
+            StopButton.IsEnabled = false;
                     progressWindow.Close();
                 });
             }
@@ -172,17 +177,49 @@ public partial class MainWindow : Window
         searchCancellation?.Cancel();
         pauseEvent.Set(); // Ensure we're not stuck in a pause
         StatusText.Text = "Stopping search...";
+        
+        // Properly dispose of the driver when stopping
+        if (driver != null)
+        {
+            try
+            {
+                driver.Quit();
+                driver.Dispose();
+                driver = null;
+                
+                // Reinitialize the driver for future searches
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        InitializeChromeDriver();
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show($"Failed to reinitialize Chrome driver: {ex.Message}",
+                                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error closing Chrome driver: {ex.Message}", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
     }
 
     private async Task PerformSearch(CancellationToken cancellationToken, Progress progressWindow)
     {
         // Clear search results and update status on UI thread
         await Dispatcher.InvokeAsync(() =>
-        {
-            searchResults.Clear();
-            StatusText.Text = "Searching...";
-            GetMagnetButton.IsEnabled = false;
-            OpenMagnetButton.IsEnabled = false;
+    {
+        searchResults.Clear();
+        StatusText.Text = "Searching...";
+        GetMagnetButton.IsEnabled = false;
+        OpenMagnetButton.IsEnabled = false;
         });
 
         try
@@ -201,9 +238,9 @@ public partial class MainWindow : Window
                 await Task.Run(() =>
                 {
                     foreach (var cookie in cookies)
-                    {
-                        driver.Manage().Cookies.AddCookie(new Cookie(cookie.Key, cookie.Value));
-                    }
+                {
+                    driver.Manage().Cookies.AddCookie(new Cookie(cookie.Key, cookie.Value));
+                }
                 });
             }
 
@@ -284,9 +321,9 @@ public partial class MainWindow : Window
         {
             // Update UI elements and close window on UI thread
             await Dispatcher.InvokeAsync(() =>
-            {
-                GetMagnetButton.IsEnabled = true;
-                OpenMagnetButton.IsEnabled = true;
+        {
+            GetMagnetButton.IsEnabled = true;
+            OpenMagnetButton.IsEnabled = true;
                 progressWindow.Close();
             });
         }
@@ -347,10 +384,10 @@ public partial class MainWindow : Window
                 try
                 {
                     return wait.Until(d => 
-                    {
-                        try
-                        {
-                            return d.FindElement(By.CssSelector("img.postImg.postImgAligned.img-right"));
+            {
+                try
+                {
+                    return d.FindElement(By.CssSelector("img.postImg.postImgAligned.img-right"));
                         }
                         catch
                         {
@@ -469,8 +506,22 @@ public partial class MainWindow : Window
         base.OnClosing(e);
         searchCancellation?.Cancel();
         pauseEvent?.Dispose();
-        // Quitting the driver needs to be on a background thread if it was initialized there
-        Task.Run(() => driver?.Quit());
+        
+        // Properly dispose of the driver
+        if (driver != null)
+        {
+            try
+            {
+                driver.Quit();
+                driver.Dispose();
+                driver = null;
+            }
+            catch (Exception ex)
+            {
+                // Log the error but don't prevent closing
+                MessageBox.Show($"Error closing Chrome driver: {ex.Message}", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
     }
 
     private void Grid_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -525,10 +576,10 @@ public partial class MainWindow : Window
                 currentMagnetLink = magnetLink;
                 // Set clipboard text and update status on UI thread
                 Dispatcher.Invoke(() =>
-                {
-                    Clipboard.SetText(currentMagnetLink);
-                    StatusText.Text = "Magnet link copied to clipboard!";
-                    OpenMagnetButton.IsEnabled = true;
+            {
+                Clipboard.SetText(currentMagnetLink);
+                StatusText.Text = "Magnet link copied to clipboard!";
+                OpenMagnetButton.IsEnabled = true;
                 });
             }
             else
@@ -541,9 +592,9 @@ public partial class MainWindow : Window
         {
             // Show error message and update status on UI thread
             Dispatcher.Invoke(() =>
-            {
-                MessageBox.Show($"Error getting magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusText.Text = "Error getting magnet link.";
+        {
+            MessageBox.Show($"Error getting magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText.Text = "Error getting magnet link.";
             });
         }
         finally
@@ -629,6 +680,74 @@ public partial class MainWindow : Window
         }
 
         return results;
+    }
+
+    private async void DetailsButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Access UI elements on UI thread
+        var button = sender as Button;
+        var selectedResult = button?.DataContext as SearchResult;
+
+        if (selectedResult == null)
+        {
+            return; // Should not happen if button is in ListView item template
+        }
+
+        // Create and show progress window on UI thread
+        var progressWindow = new Progress();
+        progressWindow.Owner = this;
+        progressWindow.Show();
+        progressWindow.StartFakeAnimation();
+        
+        string detailsText = "";
+
+        try
+        {
+            // Selenium operations on background thread
+            detailsText = await Task.Run(() =>
+            {
+                // Ensure driver is initialized before use
+                if (driver == null)
+                {
+                     Dispatcher.Invoke(() => MessageBox.Show("Chrome driver is not initialized.", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+                     return "Error: Chrome driver not initialized.";
+                }
+
+                try
+                {
+                    driver.Navigate().GoToUrl(selectedResult.Link);
+
+                    // Wait for the post body div to be present
+            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
+                    var postBodyElement = wait.Until(d => d.FindElement(By.CssSelector("div.post_body")));
+
+                    // Return the text content of the post body div
+                    return postBodyElement.Text;
+        }
+        catch (Exception ex)
+        {
+                     Dispatcher.Invoke(() => MessageBox.Show($"Error scraping details: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+                     return $"Error scraping details: {ex.Message}";
+                }
+            });
+        }
+        finally
+        {
+             // Close progress window on UI thread
+            await Dispatcher.InvokeAsync(() =>
+            {
+                progressWindow.Close();
+            });
+        }
+
+        // Show details in a new window on UI thread
+        await Dispatcher.InvokeAsync(() =>
+        {
+            var detailsWindow = new Details();
+            detailsWindow.Owner = this;
+            detailsWindow.SetDetailsText(detailsText);
+            detailsWindow.ShowDialog(); // Use ShowDialog to make it modal
+        });
     }
 }
 

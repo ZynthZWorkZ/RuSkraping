@@ -363,6 +363,15 @@
                             <GridViewColumn Header="Title" Width="400" DisplayMemberBinding="{Binding Title}"/>
                             <GridViewColumn Header="Size" Width="100" DisplayMemberBinding="{Binding Size}"/>
                             <GridViewColumn Header="Topic ID" Width="100" DisplayMemberBinding="{Binding TopicId}"/>
+                            <GridViewColumn Header="Details" Width="80">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button x:Name="DetailsButton" Click="DetailsButton_Click" Style="{StaticResource ActionButtonStyle}" Width="30" Height="30">
+                                            <fa:FontAwesome Icon="Info" Foreground="#FFFFFF"/>
+                                        </Button>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
                         </GridView>
                     </ListView.View>
                 </ListView>
