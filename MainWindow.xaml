@@ -6,146 +6,64 @@
         xmlns:local="clr-namespace:RuSkraping"
         xmlns:fa="http://schemas.fontawesome.io/icons/"
         mc:Ignorable="d"
-        Title="RuSkraping" Height="650" Width="1000"
+        Title="RuSkraping" Height="750" Width="1200"
         WindowStartupLocation="CenterScreen"
         Background="Transparent"
-        BorderBrush="#e9182b"
         BorderThickness="0"
         WindowStyle="None"
         AllowsTransparency="True">
     
     <Window.Resources>
-        <!-- Metallic Gradients -->
-        <LinearGradientBrush x:Key="WindowBackgroundGradient" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#1A1A1A" Offset="0"/>
-            <GradientStop Color="#121212" Offset="1"/>
+        <!-- Modern Color Scheme -->
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#1E1E2D"/>
+        <SolidColorBrush x:Key="SecondaryBrush" Color="#2B2B3F"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#6C5DD3"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#FF4B4B"/>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#50CD89"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A1A5B7"/>
+
+        <!-- Gradients -->
+        <LinearGradientBrush x:Key="WindowBackgroundGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#1E1E2D" Offset="0"/>
+            <GradientStop Color="#151521" Offset="1"/>
         </LinearGradientBrush>
 
-        <LinearGradientBrush x:Key="ControlBackgroundGradient" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#2A2A2A" Offset="0"/>
-            <GradientStop Color="#1E1E1E" Offset="1"/>
+        <LinearGradientBrush x:Key="ButtonGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#6C5DD3" Offset="0"/>
+            <GradientStop Color="#5346B0" Offset="1"/>
         </LinearGradientBrush>
 
-        <LinearGradientBrush x:Key="ButtonHoverBackground" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#e9182b" Offset="0"/>
-            <GradientStop Color="#c41524" Offset="1"/>
-        </LinearGradientBrush>
-
-        <SolidColorBrush x:Key="AccentBrush" Color="#e9182b"/>
-        <SolidColorBrush x:Key="GreenAccentBrush" Color="#4fbf37"/>
-        <SolidColorBrush x:Key="BlueAccentBrush" Color="#142ae0"/>
-        
-        <!-- Styles -->
+        <!-- Button Style -->
         <Style TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource ControlBackgroundGradient}"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="Padding" Value="20,12"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="15">
+                                CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource ButtonHoverBackground}"/>
-                    <Setter Property="BorderThickness" Value="1"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!-- Style for Search, Pause, Stop buttons -->
-        <Style x:Key="ActionButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource ControlBackgroundGradient}"/>
-                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                    <Setter Property="BorderThickness" Value="1"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="{StaticResource ControlBackgroundGradient}"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="10"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="15">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="5"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="ListView">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-        </Style>
-
-        <Style TargetType="ListViewItem">
-            <Setter Property="Background" Value="{StaticResource ControlBackgroundGradient}"/>
-            <Setter Property="Foreground" Value="#CCCCCC"/>
-            <Setter Property="Margin" Value="5,2"/>
-            <Setter Property="Padding" Value="15,10"/>
-            <Setter Property="BorderBrush" Value="#3A3A3A"/>
-            <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Style.Triggers>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-                    <Setter Property="Foreground" Value="#FFFFFF"/>
-                    <Setter Property="BorderBrush" Value="Transparent"/>
-                </Trigger>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#3A3A3A"/>
-                    <Setter Property="Foreground" Value="#FFFFFF"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style TargetType="GridViewColumnHeader">
-            <Setter Property="Background" Value="#1E1E1E"/>
-            <Setter Property="Foreground" Value="#e9182b"/>
-            <Setter Property="Padding" Value="10"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="BorderBrush" Value="#3A3A3A"/>
-            <Setter Property="BorderThickness" Value="0,0,1,1"/>
-        </Style>
-
-        <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CheckBox">
-                        <StackPanel Orientation="Horizontal">
-                            <Border Width="20" Height="20" CornerRadius="5" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
-                                <Path x:Name="CheckMark" Width="12" Height="12" Stretch="Uniform" Fill="{StaticResource AccentBrush}" 
-                                      Data="M0,5.5 L2,3.5 L6,7.5 L14,0.5 L16,2.5 L6,11.5 Z" 
-                                      Visibility="Collapsed"/>
-                            </Border>
-                            <ContentPresenter Margin="5,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource ButtonGradient}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -153,158 +71,200 @@
             </Setter>
         </Style>
 
-        <Style TargetType="StatusBar">
-            <Setter Property="Background" Value="#1E1E1E"/>
-            <Setter Property="Foreground" Value="#CCCCCC"/>
-        </Style>
-
-        <Style TargetType="ProgressBar">
-            <Setter Property="Background" Value="#2A2A2A"/>
-            <Setter Property="Foreground" Value="{StaticResource GreenAccentBrush}"/>
+        <!-- TextBox Style -->
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Height" Value="6"/>
+            <Setter Property="Padding" Value="15,12"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="ProgressBar">
-                        <Grid>
-                            <Border Background="{TemplateBinding Background}"
-                                    CornerRadius="3">
-                                <Grid>
-                                    <Border x:Name="PART_Indicator" 
-                                            Background="{TemplateBinding Foreground}"
-                                            CornerRadius="3"
-                                            HorizontalAlignment="Left">
-                                        <Border.Effect>
-                                            <DropShadowEffect Color="#4fbf37" BlurRadius="10" ShadowDepth="0" Opacity="0.5"/>
-                                        </Border.Effect>
-                                    </Border>
-                                </Grid>
-                            </Border>
-                        </Grid>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <Grid>
+                                <ScrollViewer x:Name="PART_ContentHost" Margin="2"/>
+                                <TextBlock x:Name="Placeholder" 
+                                         Text="{TemplateBinding Tag}" 
+                                         Foreground="{StaticResource TextSecondaryBrush}"
+                                         Margin="15,12,0,0"
+                                         Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <!-- Loading Spinner Style -->
-        <Style x:Key="LoadingSpinnerStyle" TargetType="ProgressBar">
-            <Setter Property="Width" Value="24"/>
-            <Setter Property="Height" Value="24"/>
-            <Setter Property="IsIndeterminate" Value="True"/>
+        <!-- ListView Style -->
+        <Style TargetType="ListView">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        </Style>
+
+        <!-- ListViewItem Style -->
+        <Style TargetType="ListViewItem">
+            <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Margin" Value="0,5"/>
+            <Setter Property="Padding" Value="15"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="0"
+                                CornerRadius="8">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#323248"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#323248"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- GridViewColumnHeader Style -->
+        <Style TargetType="GridViewColumnHeader">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="Padding" Value="15,10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
 
-         <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
+        <!-- CheckBox Style -->
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Margin" Value="0,0,15,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal">
+                            <Border x:Name="checkBoxBorder" 
+                                    Width="22" Height="22" 
+                                    Background="{StaticResource SecondaryBrush}"
+                                    BorderBrush="{StaticResource TextSecondaryBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="6">
+                                <Path x:Name="checkMark"
+                                      Data="M9.86364 15.5L3.5 9.13636L4.97727 7.65909L9.86364 12.5455L19.0227 3.38636L20.5 4.86364L9.86364 15.5Z"
+                                      Fill="{StaticResource TextPrimaryBrush}"
+                                      Stretch="Uniform"
+                                      Width="12" Height="12"
+                                      Visibility="Collapsed"/>
+                            </Border>
+                            <ContentPresenter Margin="10,0,0,0" 
+                                            VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="checkBoxBorder" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="checkBoxBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="checkMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="checkBoxBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <!-- ScrollBar Styles -->
+        <!-- ScrollBar Style -->
         <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="8"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Width" Value="12"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
-                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                        <Track x:Name="PART_Track" IsDirectionReversed="true">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0"/>
+                            </Track.DecreaseRepeatButton>
                             <Track.Thumb>
-                                <Thumb x:Name="Thumb" Background="{StaticResource AccentBrush}" 
-                                       BorderThickness="0" Margin="0,2">
+                                <Thumb>
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    CornerRadius="6"/>
+                                            <Border CornerRadius="4" 
+                                                    Background="{StaticResource TextSecondaryBrush}" 
+                                                    Opacity="0.6"/>
                                         </ControlTemplate>
                                     </Thumb.Template>
                                 </Thumb>
                             </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0"/>
+                            </Track.IncreaseRepeatButton>
                         </Track>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Style.Triggers>
-                <Trigger Property="Orientation" Value="Horizontal">
-                    <Setter Property="Width" Value="Auto"/>
-                    <Setter Property="Height" Value="12"/>
-                </Trigger>
-            </Style.Triggers>
         </Style>
-
-        <Style TargetType="ScrollViewer">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollViewer">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <ScrollContentPresenter Grid.Column="0" Grid.Row="0"/>
-                            <ScrollBar x:Name="PART_VerticalScrollBar" 
-                                     Grid.Column="1" Grid.Row="0"
-                                     Orientation="Vertical"
-                                     Value="{TemplateBinding VerticalOffset}"
-                                     Maximum="{TemplateBinding ScrollableHeight}"
-                                     ViewportSize="{TemplateBinding ViewportHeight}"
-                                     Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
-                            <ScrollBar x:Name="PART_HorizontalScrollBar"
-                                     Grid.Column="0" Grid.Row="1"
-                                     Orientation="Horizontal"
-                                     Value="{TemplateBinding HorizontalOffset}"
-                                     Maximum="{TemplateBinding ScrollableWidth}"
-                                     ViewportSize="{TemplateBinding ViewportWidth}"
-                                     Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
     </Window.Resources>
 
     <Border CornerRadius="16" Background="{StaticResource WindowBackgroundGradient}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
         <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="60"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
             <!-- Title Bar -->
-            <Grid Grid.Row="0" MouseLeftButtonDown="Grid_MouseLeftButtonDown">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                 <Border Background="#1A1A1A" CornerRadius="16,16,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="RuTracker Search" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Margin="20,10" VerticalAlignment="Center" Grid.Column="0"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button x:Name="MinimizeButton" Click="MinimizeButton_Click" Style="{StaticResource ActionButtonStyle}" Width="30" Height="30" Margin="5,0">
-                                <fa:FontAwesome Icon="Minus" Foreground="{StaticResource AccentBrush}"/>
-                            </Button>
-                            <Button x:Name="CloseButton" Click="CloseButton_Click" Style="{StaticResource ActionButtonStyle}" Width="30" Height="30">
-                                <fa:FontAwesome Icon="Close" Foreground="{StaticResource AccentBrush}"/>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </Grid>
+            <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}" CornerRadius="16,16,0,0" MouseLeftButtonDown="Grid_MouseLeftButtonDown">
+                <Grid Margin="20,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <fa:FontAwesome Icon="Search" Foreground="{StaticResource AccentBrush}" FontSize="24" Margin="0,0,15,0"/>
+                        <TextBlock Text="RuTracker Search" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,10">
+                        <Button x:Name="MinimizeButton" Click="MinimizeButton_Click" Width="40" Height="40" Margin="0,0,10,0"
+                                Background="Transparent" BorderThickness="0">
+                            <fa:FontAwesome Icon="Minus" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </Button>
+                        <Button x:Name="CloseButton" Click="CloseButton_Click" Width="40" Height="40"
+                                Background="Transparent" BorderThickness="0">
+                            <fa:FontAwesome Icon="Close" Foreground="{StaticResource DangerBrush}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <!-- Main Content -->
-            <Grid Grid.Row="1" Margin="20">
+            <Grid Grid.Row="1" Margin="30">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -312,95 +272,161 @@
                 </Grid.RowDefinitions>
 
                 <!-- Search Section -->
-                <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                <Border Grid.Row="0" Background="{StaticResource SecondaryBrush}" CornerRadius="12" Padding="20" Margin="0,0,0,20">
                     <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="SearchTextBox" Grid.Column="0" Margin="0,0,10,0" 
-                                VerticalContentAlignment="Center" FontSize="14"/>
-                        <Button x:Name="SearchButton" Grid.Column="1" Margin="0,0,10,0" Click="SearchButton_Click" Style="{StaticResource ActionButtonStyle}">
-                            <StackPanel Orientation="Horizontal">
-                                <fa:FontAwesome Icon="Search" Margin="0,0,5,0" Foreground="#FFFFFF"/>
-                                <TextBlock Text="Search" Foreground="#FFFFFF"/>
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="PauseButton" Grid.Column="2" Margin="0,0,10,0" Click="PauseButton_Click" IsEnabled="False" Style="{StaticResource ActionButtonStyle}">
-                            <StackPanel Orientation="Horizontal">
-                                <fa:FontAwesome Icon="Pause" Margin="0,0,5,0" Foreground="#FFFFFF"/>
-                                <TextBlock Text="Pause" Foreground="#FFFFFF"/>
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="StopButton" Grid.Column="3" Margin="0,0,10,0" Click="StopButton_Click" IsEnabled="False" Style="{StaticResource ActionButtonStyle}">
-                            <StackPanel Orientation="Horizontal">
-                                <fa:FontAwesome Icon="Stop" Margin="0,0,5,0" Foreground="#FFFFFF"/>
-                                <TextBlock Text="Stop" Foreground="#FFFFFF"/>
-                            </StackPanel>
-                        </Button>
-                        <CheckBox x:Name="UseCookiesCheckBox" Grid.Column="4" Content="Use Cookies" 
-                                VerticalAlignment="Center" IsChecked="True"/>
-                        <CheckBox x:Name="FetchImagesCheckBox" Grid.Column="5" Content="Fetch Images" 
-                                VerticalAlignment="Center" IsChecked="False" Margin="10,0,0,0"/>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Search Bar -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="SearchTextBox" Grid.Column="0" Margin="0,0,15,0" 
+                                    Tag="Enter search terms..." FontSize="14"/>
+
+                            <Button x:Name="SearchButton" Grid.Column="1" Click="SearchButton_Click" Margin="0,0,10,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <fa:FontAwesome Icon="Search" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Search"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button x:Name="PauseButton" Grid.Column="2" Click="PauseButton_Click" IsEnabled="False" Margin="0,0,10,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <fa:FontAwesome Icon="Pause" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Pause"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button x:Name="StopButton" Grid.Column="3" Click="StopButton_Click" IsEnabled="False">
+                                <StackPanel Orientation="Horizontal">
+                                    <fa:FontAwesome Icon="Stop" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Stop"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- Options -->
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,15,0,0">
+                            <CheckBox x:Name="UseCookiesCheckBox" Content="Use Cookies" IsChecked="True"/>
+                            <CheckBox x:Name="FetchImagesCheckBox" Content="Fetch Images" IsChecked="False"/>
+                        </StackPanel>
                     </Grid>
-                </StackPanel>
+                </Border>
 
                 <!-- Results Section -->
-                <ListView x:Name="ResultsListView" Grid.Row="1" Margin="0,0,0,20">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Image" Width="80">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Image Source="{Binding ImageUrl}" Width="60" Height="60" Stretch="Uniform"/>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                            <GridViewColumn Header="Title" Width="400" DisplayMemberBinding="{Binding Title}"/>
-                            <GridViewColumn Header="Size" Width="100" DisplayMemberBinding="{Binding Size}"/>
-                            <GridViewColumn Header="Topic ID" Width="100" DisplayMemberBinding="{Binding TopicId}"/>
-                            <GridViewColumn Header="Details" Width="80">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button x:Name="DetailsButton" Click="DetailsButton_Click" Style="{StaticResource ActionButtonStyle}" Width="30" Height="30">
-                                            <fa:FontAwesome Icon="Info" Foreground="#FFFFFF"/>
-                                        </Button>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
+                <Border Grid.Row="1" Background="{StaticResource SecondaryBrush}" CornerRadius="12" Margin="0,0,0,20">
+                    <ListView x:Name="ResultsListView" Margin="10">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Image" Width="80">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Width="60" Height="60" CornerRadius="6" Background="#1A1A1A" Margin="2">
+                                                <Image Source="{Binding ImageUrl}" Stretch="Uniform"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Title" Width="600">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Title}" 
+                                                     TextWrapping="Wrap" 
+                                                     Foreground="{StaticResource TextPrimaryBrush}"
+                                                     MaxWidth="580"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Size" Width="100">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Size}" 
+                                                     Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Topic ID" Width="100">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding TopicId}" 
+                                                     Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Width="60">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button x:Name="DetailsButton" 
+                                                    Click="DetailsButton_Click" 
+                                                    Width="32" Height="32" 
+                                                    Padding="0"
+                                                    Background="Transparent"
+                                                    BorderThickness="0">
+                                                <fa:FontAwesome Icon="Info" 
+                                                              Foreground="{StaticResource AccentBrush}"/>
+                                            </Button>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                            </GridView>
+                        </ListView.View>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Margin" Value="0,2"/>
+                                <Setter Property="Padding" Value="10,8"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#323248"/>
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="#323248"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
+                </Border>
 
                 <!-- Action Buttons -->
-                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button x:Name="GetMagnetButton" Margin="0,0,10,0" Click="GetMagnetButton_Click">
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                    <Button x:Name="GetMagnetButton" Click="GetMagnetButton_Click" Margin="0,0,15,0">
                         <StackPanel Orientation="Horizontal">
-                            <fa:FontAwesome Icon="Magnet" Margin="0,0,5,0" Foreground="#FFFFFF"/>
-                            <TextBlock Text="Get Magnet Link" Foreground="#FFFFFF"/>
+                            <fa:FontAwesome Icon="Magnet" Margin="0,0,8,0"/>
+                            <TextBlock Text="Get Magnet Link"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="OpenMagnetButton" Click="OpenMagnetButton_Click">
                         <StackPanel Orientation="Horizontal">
-                            <fa:FontAwesome Icon="ExternalLink" Margin="0,0,5,0" Foreground="#FFFFFF"/>
-                            <TextBlock Text="Open Magnet" Foreground="#FFFFFF"/>
+                            <fa:FontAwesome Icon="ExternalLink" Margin="0,0,8,0"/>
+                            <TextBlock Text="Open Magnet"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
             </Grid>
 
             <!-- Status Bar -->
-            <StatusBar Grid.Row="2" Background="#1A1A1A">
-                <StatusBarItem>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="StatusText" Text="Ready" Foreground="#CCCCCC"/>
-                    </StackPanel>
-                </StatusBarItem>
-            </StatusBar>
+            <Border Grid.Row="2" Background="{StaticResource PrimaryBrush}" CornerRadius="0,0,16,16">
+                <Grid Margin="20,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="StatusText" Text="Ready" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <ProgressBar Grid.Column="1" Width="200" Height="4" Value="0" Margin="20,0,0,0"/>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </Window>

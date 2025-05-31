@@ -4,90 +4,113 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:RuSkraping"
+        xmlns:fa="http://schemas.fontawesome.io/icons/"
         mc:Ignorable="d"
         Title="Details" Height="600" Width="800"
         WindowStartupLocation="CenterScreen"
-        Background="#1A1A1A"
-        BorderBrush="#e9182b"
-        BorderThickness="1"
+        Background="Transparent"
+        BorderThickness="0"
         WindowStyle="None"
         AllowsTransparency="True">
-    <Border CornerRadius="16" Background="#1A1A1A" BorderBrush="#e9182b" BorderThickness="1">
+    
+    <Window.Resources>
+        <!-- Modern Color Scheme -->
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#1E1E2D"/>
+        <SolidColorBrush x:Key="SecondaryBrush" Color="#2B2B3F"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#6C5DD3"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#FF4B4B"/>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#50CD89"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A1A5B7"/>
+
+        <!-- Gradients -->
+        <LinearGradientBrush x:Key="WindowBackgroundGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#1E1E2D" Offset="0"/>
+            <GradientStop Color="#151521" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Button Style -->
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ScrollViewer Style -->
+        <Style TargetType="ScrollViewer">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="16" Background="{StaticResource WindowBackgroundGradient}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="60"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
             <!-- Title Bar -->
-            <Grid Grid.Row="0" Background="#121212" MouseLeftButtonDown="Grid_MouseLeftButtonDown">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Torrent Details" FontSize="20" FontWeight="Bold" Foreground="#e9182b" Margin="20,10" VerticalAlignment="Center"/>
-                <Button x:Name="TranslateButton" Click="TranslateButton_Click" Width="30" Height="30" Margin="10,0" Grid.Column="1">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Foreground" Value="#e9182b"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="15">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#e9182b"/>
-                                    <Setter Property="Foreground" Value="#121212"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                    <TextBlock Text="🌐" FontSize="16"/>
-                </Button>
-                <Button x:Name="CloseButton" Click="CloseButton_Click" Width="30" Height="30" HorizontalAlignment="Right" Margin="10,0" Grid.Column="2">
-                     <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Foreground" Value="#e9182b"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="15">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#e9182b"/>
-                                    <Setter Property="Foreground" Value="#121212"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                     </Button.Style>
-                    <TextBlock Text="X" FontWeight="Bold"/>
-                </Button>
-            </Grid>
+            <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}" CornerRadius="16,16,0,0" MouseLeftButtonDown="Grid_MouseLeftButtonDown">
+                <Grid Margin="20,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <fa:FontAwesome Icon="Info" Foreground="{StaticResource AccentBrush}" FontSize="24" Margin="0,0,15,0"/>
+                        <TextBlock Text="Torrent Details" FontSize="20" FontWeight="SemiBold"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,10">
+                        <Button x:Name="TranslateButton" Click="TranslateButton_Click" Width="40" Height="40" Margin="0,0,10,0">
+                            <fa:FontAwesome Icon="Language" Foreground="{StaticResource AccentBrush}"/>
+                        </Button>
+                        <Button x:Name="CloseButton" Click="CloseButton_Click" Width="40" Height="40">
+                            <fa:FontAwesome Icon="Close" Foreground="{StaticResource DangerBrush}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <!-- Details Content -->
             <ScrollViewer Grid.Row="1" Margin="20">
-                <TextBlock x:Name="DetailsTextBlock" Foreground="#CCCCCC" TextWrapping="Wrap"/>
+                <TextBlock x:Name="DetailsTextBlock" 
+                          Foreground="{StaticResource TextPrimaryBrush}" 
+                          TextWrapping="Wrap"
+                          FontSize="14"
+                          LineHeight="24"/>
             </ScrollViewer>
         </Grid>
     </Border>
