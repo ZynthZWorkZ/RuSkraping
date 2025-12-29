@@ -80,7 +80,7 @@ namespace RuSkraping
             });
         }
 
-        public void UpdateProgress(double percentage, string status = null)
+        public void UpdateProgress(double percentage, string? status = null)
         {
             if (isCancelled) return;
 

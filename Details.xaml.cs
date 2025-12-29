@@ -14,7 +14,7 @@ namespace RuSkraping
     {
         private readonly ITranslator _translator;
         private readonly ITranslator _transliterator;
-        private string _originalText;
+        private string _originalText = string.Empty;
         private bool _isTranslated = false;
         private bool _isTransliterated = false;
 

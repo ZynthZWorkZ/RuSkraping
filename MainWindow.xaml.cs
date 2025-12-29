@@ -1,8 +1,4 @@
-﻿using OpenQA.Selenium;
-using OpenQA.Selenium.Chrome;
-using OpenQA.Selenium.Support.UI;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -11,8 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Web;
 using System.Windows.Input;
+using RuSkraping.Models;
+using RuSkraping.Services;
 
 namespace RuSkraping;
 
@@ -21,78 +18,42 @@ namespace RuSkraping;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private ObservableCollection<SearchResult> searchResults;
-    private ChromeDriver driver;
-    private string currentMagnetLink;
-    private CancellationTokenSource searchCancellation;
+    private ObservableCollection<TorrentSearchResult> searchResults;
+    private RuTrackerSearchService? searchService;
+    private string currentMagnetLink = string.Empty;
+    private CancellationTokenSource? searchCancellation;
     private bool isPaused;
     private ManualResetEvent pauseEvent;
 
     public MainWindow()
     {
         InitializeComponent();
-        searchResults = new ObservableCollection<SearchResult>();
+        searchResults = new ObservableCollection<TorrentSearchResult>();
         ResultsListView.ItemsSource = searchResults;
         pauseEvent = new ManualResetEvent(true);
         
-        // Initialize driver on a background thread
-        Task.Run(() =>
-        {
-            try
-        {
-            InitializeChromeDriver();
-        }
-        catch (Exception ex)
-            {
-                // Show error message on the UI thread
-                Dispatcher.Invoke(() =>
-        {
-            MessageBox.Show($"Failed to initialize Chrome driver: {ex.Message}\n\nPlease make sure Chrome is installed and up to date.", 
-                "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            Application.Current.Shutdown();
-                });
-        }
-        });
-    }
-
-    private void InitializeChromeDriver()
-    {
-        ChromeDriver tempDriver = null;
-        var options = new ChromeOptions();
-        options.AddArgument("--headless=new");
-        options.AddArgument("--disable-gpu");
-        options.AddArgument("--window-size=1920,1080");
-        options.AddArgument("--disable-extensions");
-        options.AddArgument("--disable-software-rasterizer");
-        options.AddArgument("--disable-dev-shm-usage");
-        options.AddArgument("--no-sandbox");
-        options.AddArgument("--disable-notifications");
-        options.AddArgument("--disable-popup-blocking");
-        options.AddArgument("--disable-infobars");
-        options.AddArgument("--disable-logging");
-        options.AddArgument("--log-level=3");
-        options.AddArgument("--silent");
-        options.AddExcludedArgument("enable-automation");
-        options.AddAdditionalOption("useAutomationExtension", false);
-
-        var service = ChromeDriverService.CreateDefaultService();
-        service.HideCommandPromptWindow = true;
-
+        // Initialize search service (no ChromeDriver needed!)
         try
         {
-            tempDriver = new ChromeDriver(service, options);
-            tempDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(10);
-            tempDriver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(30);
-            driver = tempDriver; // Assign to the field only after successful creation and setup
+            searchService = new RuTrackerSearchService();
+            
+            // Load cookies and set them in the service
+            var cookies = CookieStorage.LoadCookies();
+            if (cookies != null && cookies.Count > 0)
+            {
+                searchService.SetCookies(cookies);
+            }
         }
-        catch (WebDriverException ex)
+        catch (Exception ex)
         {
-            // Dispose of tempDriver if it was created before the exception
-            tempDriver?.Quit();
-            tempDriver?.Dispose();
-            throw new Exception($"Chrome driver initialization failed: {ex.Message}", ex);
+            MessageBox.Show($"Failed to initialize search service: {ex.Message}", 
+                "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Application.Current.Shutdown();
         }
     }
+
+    // ChromeDriver initialization removed - no longer needed for search!
+    // Only LoginWindow uses ChromeDriver now for authentication
 
     private async void SearchButton_Click(object sender, RoutedEventArgs e)
     {
@@ -177,329 +138,139 @@ public partial class MainWindow : Window
         searchCancellation?.Cancel();
         pauseEvent.Set(); // Ensure we're not stuck in a pause
         StatusText.Text = "Stopping search...";
-        
-        // Properly dispose of the driver when stopping
-        if (driver != null)
-        {
-            try
-            {
-                driver.Quit();
-                driver.Dispose();
-                driver = null;
-                
-                // Reinitialize the driver for future searches
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        InitializeChromeDriver();
-                    }
-                    catch (Exception ex)
-                    {
-                        Dispatcher.Invoke(() =>
-                        {
-                            MessageBox.Show($"Failed to reinitialize Chrome driver: {ex.Message}",
-                                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        });
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error closing Chrome driver: {ex.Message}", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
     }
 
     private async Task PerformSearch(CancellationToken cancellationToken, Progress progressWindow)
     {
         // Clear search results and update status on UI thread
         await Dispatcher.InvokeAsync(() =>
-    {
-        searchResults.Clear();
-        StatusText.Text = "Searching...";
-        GetMagnetButton.IsEnabled = false;
-        OpenMagnetButton.IsEnabled = false;
+        {
+            searchResults.Clear();
+            StatusText.Text = "Searching...";
+            GetMagnetButton.IsEnabled = false;
+            OpenMagnetButton.IsEnabled = false;
         });
 
         try
         {
-            // Selenium operations on background thread
-            await Task.Run(() => driver.Navigate().GoToUrl("https://rutracker.org"));
-
-            // Load and set cookies if enabled
-            // Accessing UseCookiesCheckBox needs to be on the UI thread
-            bool useCookies = await Dispatcher.InvokeAsync(() => UseCookiesCheckBox.IsChecked == true);
-
-            if (useCookies)
+            // Check for valid cookies first
+            List<Models.CookieData>? savedCookies = CookieStorage.LoadCookies();
+            if (savedCookies == null || savedCookies.Count == 0)
             {
-                var cookies = LoadCookiesFromFile("rutackercookies.txt");
-                // Adding cookies to driver on background thread
-                await Task.Run(() =>
+                // No valid cookies, need to login
+                bool loginSuccess = false;
+                await Dispatcher.InvokeAsync(() =>
                 {
-                    foreach (var cookie in cookies)
-                {
-                    driver.Manage().Cookies.AddCookie(new Cookie(cookie.Key, cookie.Value));
-                }
-                });
-            }
-
-            // Construct the target URL - SearchTextBox access on UI thread
-            string baseUrl = "https://rutracker.org/forum/tracker.php?nm=";
-            string searchText = await Dispatcher.InvokeAsync(() => SearchTextBox.Text);
-            string encodedSearch = HttpUtility.UrlEncode(searchText);
-            string targetUrl = baseUrl + encodedSearch;
-
-            // Visit the first page on background thread
-            await Task.Run(() => driver.Navigate().GoToUrl(targetUrl));
-
-            // Get total number of pages on background thread
-            int totalPages = await Task.Run(() => GetTotalPages(driver));
-            // Update status text on UI thread
-            await Dispatcher.InvokeAsync(() => StatusText.Text = $"Found {totalPages} pages of results");
-
-            // Process each page
-            for (int pageNum = 1; pageNum <= totalPages; pageNum++)
-            {
-                // Check for cancellation and pause on background thread
-                if (progressWindow.IsCancelled)
-                {
-                    throw new OperationCanceledException();
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-                pauseEvent.WaitOne(); // Wait if paused
-
-                // StatusText update on UI thread
-                await Dispatcher.InvokeAsync(() => StatusText.Text = $"Processing page {pageNum} of {totalPages}...");
-                double progress = (double)pageNum / totalPages * 100;
-                // progressWindow.UpdateProgress is designed to be thread-safe and uses Dispatcher.Invoke internally
-                progressWindow.UpdateProgress(progress, $"Processing page {pageNum} of {totalPages}");
-
-                // Extract titles from current page on background thread
-                var pageResults = await Task.Run(() => ExtractTitles(driver));
-                // Add results to searchResults (ObservableCollection) on UI thread
-                foreach (var result in pageResults)
-                {
-                    await Dispatcher.InvokeAsync(() => searchResults.Add(result));
-                }
-
-                // If this isn't the last page, go to the next page on background thread
-                if (pageNum < totalPages)
-                {
-                    bool success = await Task.Run(() => GoToPage(driver, pageNum + 1));
-                    if (!success)
+                    var loginWindow = new LoginWindow();
+                    if (loginWindow.ShowDialog() == true && loginWindow.LoginSuccessful)
                     {
-                        // Update status text on UI thread
-                        await Dispatcher.InvokeAsync(() => StatusText.Text = $"Failed to go to page {pageNum + 1}");
-                        break;
+                        loginSuccess = true;
                     }
-                    // Small delay on background thread
-                    await Task.Delay(1000, cancellationToken);
+                });
+                
+                if (!loginSuccess)
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        StatusText.Text = "Login required to perform search.";
+                        MessageBox.Show("Login is required to perform searches. Please login and try again.", 
+                            "Login Required", MessageBoxButton.OK, MessageBoxImage.Information);
+                    });
+                    return;
+                }
+                
+                // Reload cookies after successful login
+                savedCookies = CookieStorage.LoadCookies();
+                if (savedCookies == null || savedCookies.Count == 0)
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        StatusText.Text = "Failed to load cookies after login.";
+                        MessageBox.Show("Failed to load cookies after login. Please try again.", 
+                            "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    });
+                    return;
+                }
+                
+                // Reinitialize search service with new cookies
+                if (searchService != null)
+                {
+                    searchService.SetCookies(savedCookies);
                 }
             }
 
-            // Update status text on UI thread
-            await Dispatcher.InvokeAsync(() => StatusText.Text = $"Search complete. Found {searchResults.Count} results.");
-            
-            // Only fetch images if the checkbox is checked - FetchImagesCheckBox access on UI thread
-            bool fetchImages = await Dispatcher.InvokeAsync(() => FetchImagesCheckBox.IsChecked == true);
+            // Get search text from UI
+            string searchText = await Dispatcher.InvokeAsync(() => SearchTextBox.Text);
 
-            if (fetchImages)
+            // Update status
+            await Dispatcher.InvokeAsync(() => StatusText.Text = "Fetching search results...");
+
+            // Perform HTTP-based search (no ChromeDriver needed!)
+            var results = await searchService!.SearchAsync(
+                searchText, 
+                maxPages: -1, // Get all pages
+                cancellationToken: cancellationToken,
+                progressCallback: (currentPage, totalPage, allResults) =>
+                {
+                    // Check for pause
+                    pauseEvent.WaitOne();
+                    
+                    // Update UI with results from this page
+                    Dispatcher.Invoke(() =>
+                    {
+                        StatusText.Text = $"Processing page {currentPage}... Found {allResults.Count} results";
+                        
+                        // Add new results that aren't already in the collection
+                        var existingIds = searchResults.Select(r => r.TopicId).ToHashSet();
+                        foreach (var result in allResults.Where(r => !existingIds.Contains(r.TopicId)))
+                        {
+                            searchResults.Add(result);
+                            existingIds.Add(result.TopicId);
+                        }
+                        
+                        // Update progress bar
+                        double progress = Math.Min((double)allResults.Count / Math.Max(allResults.Count, 50) * 100, 99);
+                        progressWindow.UpdateProgress(progress, $"Page {currentPage}: {allResults.Count} results");
+                    });
+                });
+
+            // Final progress update
+            progressWindow.UpdateProgress(100, $"Complete! Found {results.Count} results");
+
+            // Update status text on UI thread
+            await Dispatcher.InvokeAsync(() => 
             {
-                // Update status text on UI thread
-                await Dispatcher.InvokeAsync(() => StatusText.Text = $"Search complete. Found {searchResults.Count} results. Fetching images...");
-                // progressWindow.UpdateProgress is thread-safe
-                progressWindow.UpdateProgress(0, "Fetching images...");
-                await FetchImagesForResults(cancellationToken, progressWindow);
-            }
-
-            // Update status text on UI thread
-            await Dispatcher.InvokeAsync(() => StatusText.Text = $"Search complete. Found {searchResults.Count} results.");
+                StatusText.Text = $"Search complete. Found {searchResults.Count} results.";
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            await Dispatcher.InvokeAsync(() => 
+            {
+                StatusText.Text = "Search cancelled.";
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.InvokeAsync(() =>
+            {
+                StatusText.Text = $"Search failed: {ex.Message}";
+                MessageBox.Show($"Search error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            });
         }
         finally
         {
             // Update UI elements and close window on UI thread
             await Dispatcher.InvokeAsync(() =>
-        {
-            GetMagnetButton.IsEnabled = true;
-            OpenMagnetButton.IsEnabled = true;
+            {
+                GetMagnetButton.IsEnabled = true;
+                OpenMagnetButton.IsEnabled = true;
                 progressWindow.Close();
             });
         }
     }
 
-    private async Task FetchImagesForResults(CancellationToken cancellationToken, Progress progressWindow)
-    {
-        var tasks = new List<Task>();
-        // Accessing searchResults.Count needs to be on the UI thread
-        int totalResults = await Dispatcher.InvokeAsync(() => searchResults.Count);
-        int processedResults = 0;
-
-        foreach (var result in searchResults)
-        {
-            if (cancellationToken.IsCancellationRequested || progressWindow.IsCancelled) break;
-            
-            // Fetching image for result should be on background thread
-            tasks.Add(Task.Run(async () =>
-            {
-                await FetchImageForResult(result, cancellationToken);
-                // Updating processedResults and progress needs to be on UI thread for accurate display
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    processedResults++;
-                    double progress = (double)processedResults / totalResults * 100;
-                    progressWindow.UpdateProgress(progress, $"Fetching image {processedResults} of {totalResults}");
-                });
-            }));
-            
-            // Process in batches to avoid overwhelming the browser
-            if (tasks.Count >= 5)
-            {
-                await Task.WhenAll(tasks);
-                tasks.Clear();
-                // Small delay on background thread
-                await Task.Delay(500, cancellationToken);
-            }
-        }
-        
-        // Process any remaining tasks
-        if (tasks.Any())
-        {
-            await Task.WhenAll(tasks);
-        }
-    }
-
-    private async Task FetchImageForResult(SearchResult result, CancellationToken cancellationToken)
-    {
-        try
-        {
-            // Navigate to the result's page on background thread
-            await Task.Run(() => driver.Navigate().GoToUrl(result.Link));
-            
-            // Wait for the page to load and find element on background thread
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-            var imageElement = await Task.Run(() =>
-            {
-                try
-                {
-                    return wait.Until(d => 
-            {
-                try
-                {
-                    return d.FindElement(By.CssSelector("img.postImg.postImgAligned.img-right"));
-                        }
-                        catch
-                        {
-                            return null;
-                        }
-                    });
-                }
-                catch
-                {
-                    return null;
-                }
-            });
-
-            if (imageElement != null)
-            {
-                // Get attribute on background thread
-                string imageUrl = await Task.Run(() => imageElement.GetAttribute("src"));
-                if (!string.IsNullOrEmpty(imageUrl))
-                {
-                    // Updating SearchResult.ImageUrl needs to be on UI thread as SearchResult is in ObservableCollection
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        result.ImageUrl = imageUrl;
-                    });
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            // Log the error but continue with other results
-            Console.WriteLine($"Error fetching image for {result.Title}: {ex.Message}");
-        }
-    }
-
-    private string ExtractMagnetLink(IWebDriver driver)
-    {
-        try
-        {
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-            // Finding element on background thread
-            var magnetLinkElement = wait.Until(d => d.FindElement(By.CssSelector("a.magnet-link")));
-            // Getting attribute on background thread
-            return magnetLinkElement.GetAttribute("href") ?? string.Empty;
-        }
-        catch (Exception ex)
-        {
-            // MessageBox.Show needs to be on UI thread
-            Dispatcher.Invoke(() => MessageBox.Show($"Error extracting magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
-            return string.Empty;
-        }
-    }
-
-    private int GetTotalPages(IWebDriver driver)
-    {
-        try
-        {
-            // Finding elements on background thread
-            var pageLinks = driver.FindElements(By.CssSelector("a.pg[href*='start=']"));
-            if (!pageLinks.Any())
-                return 1;
-
-            int maxPage = 1;
-            foreach (var link in pageLinks)
-            {
-                // Accessing link.Text needs to be on background thread if link element is from background thread
-                if (int.TryParse(link.Text, out int pageNum))
-                {
-                    maxPage = Math.Max(maxPage, pageNum);
-                }
-            }
-            return maxPage;
-        }
-        catch
-        {
-            return 1;
-        }
-    }
-
-    private bool GoToPage(IWebDriver driver, int pageNum)
-    {
-        try
-        {
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-            // Finding elements on background thread
-            var pageLinks = driver.FindElements(By.CssSelector("a.pg[href*='start=']"));
-            // Finding target link on background thread
-            var targetLink = pageLinks.FirstOrDefault(link => link.Text == pageNum.ToString());
-
-            if (targetLink == null)
-            {
-                // StatusText update was already handled on UI thread in PerformSearch
-                return false;
-            }
-
-            // Scroll the link into view on background thread
-            ((IJavaScriptExecutor)driver).ExecuteScript("arguments[0].scrollIntoView(true);", targetLink);
-            System.Threading.Thread.Sleep(500); // Small delay on background thread
-
-            // Click the link on background thread
-            targetLink.Click();
-
-            // Wait for the page to load on background thread
-            wait.Until(d => d.FindElements(By.CssSelector("div.wbr.t-title a.tLink")).Any());
-            return true;
-        }
-        catch (Exception ex)
-        {
-            // MessageBox.Show needs to be on UI thread
-            Dispatcher.Invoke(() => MessageBox.Show($"Error going to page {pageNum}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
-            return false;
-        }
-    }
+    // Old Selenium-based methods removed - no longer needed with HTTP-based search!
 
     protected override void OnClosing(CancelEventArgs e)
     {
@@ -507,21 +278,8 @@ public partial class MainWindow : Window
         searchCancellation?.Cancel();
         pauseEvent?.Dispose();
         
-        // Properly dispose of the driver
-        if (driver != null)
-        {
-            try
-            {
-                driver.Quit();
-                driver.Dispose();
-                driver = null;
-            }
-            catch (Exception ex)
-            {
-                // Log the error but don't prevent closing
-                MessageBox.Show($"Error closing Chrome driver: {ex.Message}", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
+        // Dispose of search service
+        searchService?.Dispose();
     }
 
     private void Grid_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -559,59 +317,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        var selectedResult = (SearchResult)ResultsListView.SelectedItem;
+        var selectedResult = (TorrentSearchResult)ResultsListView.SelectedItem;
         
-        // Update UI elements on UI thread
-        StatusText.Text = "Getting magnet link...";
-        GetMagnetButton.IsEnabled = false;
-        OpenMagnetButton.IsEnabled = false;
-
-        try
+        // Check if download URL is available (from rusearch parsing)
+        if (!string.IsNullOrEmpty(selectedResult.DownloadUrl))
         {
-            // Selenium operations on background thread
-            string magnetLink = await Task.Run(() => ExtractMagnetLinkForSelection(selectedResult));
-
-            if (!string.IsNullOrEmpty(magnetLink))
-            {
-                currentMagnetLink = magnetLink;
-                // Set clipboard text and update status on UI thread
-                Dispatcher.Invoke(() =>
-            {
-                Clipboard.SetText(currentMagnetLink);
-                StatusText.Text = "Magnet link copied to clipboard!";
-                OpenMagnetButton.IsEnabled = true;
-                });
-            }
-            else
-            {
-                // Update status on UI thread
-                Dispatcher.Invoke(() => StatusText.Text = "Could not find magnet link.");
-            }
+            // Use the direct download URL as "magnet" (it's actually the torrent file download link)
+            currentMagnetLink = selectedResult.DownloadUrl;
+            Clipboard.SetText(currentMagnetLink);
+            StatusText.Text = "Download link copied to clipboard!";
+            OpenMagnetButton.IsEnabled = true;
         }
-        catch (Exception ex)
+        else
         {
-            // Show error message and update status on UI thread
-            Dispatcher.Invoke(() =>
-        {
-            MessageBox.Show($"Error getting magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            StatusText.Text = "Error getting magnet link.";
-            });
+            MessageBox.Show("No download link available for this torrent.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            StatusText.Text = "No download link available.";
         }
-        finally
-        {
-            // Update UI element on UI thread
-            Dispatcher.Invoke(() => GetMagnetButton.IsEnabled = true);
-        }
-    }
-
-    // Helper method to extract magnet link for a specific result on a background thread
-    private string ExtractMagnetLinkForSelection(SearchResult selectedResult)
-    {
-         // Navigate to the topic page on background thread
-        driver.Navigate().GoToUrl(selectedResult.Link);
-        
-        // Wait for and extract the magnet link on background thread
-        return ExtractMagnetLink(driver);
     }
 
     private void OpenMagnetButton_Click(object sender, RoutedEventArgs e)
@@ -641,121 +362,230 @@ public partial class MainWindow : Window
         }
     }
 
-    private Dictionary<string, string> LoadCookiesFromFile(string filename)
+    /// <summary>
+    /// Checks if cookies are valid and prompts for login if needed
+    /// </summary>
+    private async Task<bool> EnsureValidCookiesAsync()
     {
-        var cookies = new Dictionary<string, string>();
-        if (File.Exists(filename))
+        if (!CookieStorage.HasValidCookies())
         {
-            foreach (string line in File.ReadAllLines(filename))
+            // Show login window
+            var loginWindow = new LoginWindow();
+            var result = await Dispatcher.InvokeAsync(() => loginWindow.ShowDialog());
+            
+            if (result == true && loginWindow.LoginSuccessful)
             {
-                if (line.Contains("="))
-                {
-                    var parts = line.Split(new[] { '=' }, 2);
-                    cookies[parts[0].Trim()] = parts[1].Trim();
-                }
+                return true;
             }
+            return false;
         }
-        return cookies;
+        return true;
     }
 
-    private List<SearchResult> ExtractTitles(IWebDriver driver)
+    private async void LoginButton_Click(object sender, RoutedEventArgs e)
     {
-        var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-        var titleElements = wait.Until(d => d.FindElements(By.CssSelector("div.wbr.t-title a.tLink")));
-        var sizeElements = driver.FindElements(By.CssSelector("a.small.tr-dl.dl-stub"));
-
-        var results = new List<SearchResult>();
-        for (int i = 0; i < titleElements.Count; i++)
+        var loginWindow = new LoginWindow();
+        if (loginWindow.ShowDialog() == true && loginWindow.LoginSuccessful)
         {
-            var element = titleElements[i];
-            string size = i < sizeElements.Count ? sizeElements[i].Text.Trim() : "Unknown";
+            StatusText.Text = "Login successful! Cookies have been saved.";
+            MessageBox.Show("Login successful! Your cookies have been saved.", 
+                "Login Success", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else
+        {
+            StatusText.Text = "Login cancelled or failed.";
+        }
+    }
+
+    private void CheckAuthButton_Click(object sender, RoutedEventArgs e)
+    {
+        var cookies = CookieStorage.LoadCookies();
+        if (cookies != null && cookies.Count > 0)
+        {
+            var validCookies = cookies.Where(c => 
+                c.Session || 
+                (c.Expires.HasValue && c.Expires.Value > DateTime.UtcNow)
+            ).ToList();
             
-            results.Add(new SearchResult
+            if (validCookies.Count > 0)
             {
-                Title = element.Text.Trim(),
-                Link = element.GetAttribute("href"),
-                TopicId = element.GetAttribute("data-topic_id"),
-                Size = size
-            });
+                StatusText.Text = $"Authentication valid. {validCookies.Count} active cookies.";
+                MessageBox.Show($"Authentication is valid!\n\nActive cookies: {validCookies.Count}\nTotal cookies: {cookies.Count}", 
+                    "Authentication Status", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                StatusText.Text = "All cookies have expired. Please login again.";
+                MessageBox.Show("All cookies have expired. Please login again.", 
+                    "Authentication Expired", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        else
+        {
+            StatusText.Text = "No cookies found. Please login.";
+            MessageBox.Show("No cookies found. Please login to authenticate.", 
+                "Not Authenticated", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ExportCookiesButton_Click(object sender, RoutedEventArgs e)
+    {
+        var cookies = CookieStorage.LoadCookies();
+        if (cookies == null || cookies.Count == 0)
+        {
+            MessageBox.Show("No cookies to export. Please login first.", 
+                "No Cookies", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
         }
 
-        return results;
+        try
+        {
+            var saveDialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                FileName = "rutracker_cookies.json",
+                DefaultExt = "json"
+            };
+
+            if (saveDialog.ShowDialog() == true)
+            {
+                var options = new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+
+                var json = System.Text.Json.JsonSerializer.Serialize(cookies, options);
+                File.WriteAllText(saveDialog.FileName, json);
+                
+                StatusText.Text = $"Cookies exported to {Path.GetFileName(saveDialog.FileName)}";
+                MessageBox.Show($"Cookies exported successfully to:\n{saveDialog.FileName}", 
+                    "Export Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error exporting cookies: {ex.Message}", 
+                "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // Old ExtractTitles method removed - now using HTTP-based RuTrackerSearchService
+
+    private async void DownloadButton_Click(object sender, RoutedEventArgs e)
+    {
+        var button = sender as Button;
+        var selectedResult = button?.DataContext as TorrentSearchResult;
+
+        if (selectedResult == null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(selectedResult.DownloadUrl))
+        {
+            MessageBox.Show("No download URL available for this torrent.", 
+                "Download Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        // Show save file dialog
+        var saveDialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "Torrent files (*.torrent)|*.torrent|All files (*.*)|*.*",
+            FileName = $"{selectedResult.TopicId}_{SanitizeFileName(selectedResult.Title)}.torrent",
+            DefaultExt = "torrent",
+            Title = "Save Torrent File"
+        };
+
+        if (saveDialog.ShowDialog() != true)
+        {
+            return; // User cancelled
+        }
+
+        // Disable button during download
+        button.IsEnabled = false;
+        var originalStatus = StatusText.Text;
+        StatusText.Text = $"Downloading torrent: {selectedResult.Title.Substring(0, Math.Min(50, selectedResult.Title.Length))}...";
+
+        try
+        {
+            // Download the torrent file
+            byte[] torrentData = await searchService!.DownloadTorrentAsync(selectedResult.DownloadUrl);
+            
+            // Save to file
+            await File.WriteAllBytesAsync(saveDialog.FileName, torrentData);
+            
+            StatusText.Text = $"Downloaded: {Path.GetFileName(saveDialog.FileName)}";
+            MessageBox.Show($"Torrent file downloaded successfully!\n\nSaved to:\n{saveDialog.FileName}", 
+                "Download Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Download failed: {ex.Message}";
+            MessageBox.Show($"Failed to download torrent:\n{ex.Message}", 
+                "Download Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            button.IsEnabled = true;
+            if (StatusText.Text.StartsWith("Downloaded:") || StatusText.Text.StartsWith("Download failed:"))
+            {
+                await Task.Delay(3000);
+                StatusText.Text = originalStatus;
+            }
+        }
+    }
+
+    private string SanitizeFileName(string fileName)
+    {
+        // Remove invalid filename characters
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = string.Join("_", fileName.Split(invalid, StringSplitOptions.RemoveEmptyEntries));
+        
+        // Limit length
+        if (sanitized.Length > 100)
+        {
+            sanitized = sanitized.Substring(0, 100);
+        }
+        
+        return sanitized;
     }
 
     private async void DetailsButton_Click(object sender, RoutedEventArgs e)
     {
         // Access UI elements on UI thread
         var button = sender as Button;
-        var selectedResult = button?.DataContext as SearchResult;
+        var selectedResult = button?.DataContext as TorrentSearchResult;
 
         if (selectedResult == null)
         {
             return; // Should not happen if button is in ListView item template
         }
 
-        // Create and show progress window on UI thread
-        var progressWindow = new Progress();
-        progressWindow.Owner = this;
-        progressWindow.Show();
-        progressWindow.StartFakeAnimation();
-        
-        string detailsText = "";
+        // For now, show basic details from what we already have
+        // TODO: Implement HTTP-based detail fetching in future
+        string detailsText = $@"Topic ID: {selectedResult.TopicId}
+Title: {selectedResult.Title}
 
-        try
-        {
-            // Selenium operations on background thread
-            detailsText = await Task.Run(() =>
-            {
-                // Ensure driver is initialized before use
-                if (driver == null)
-                {
-                     Dispatcher.Invoke(() => MessageBox.Show("Chrome driver is not initialized.", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
-                     return "Error: Chrome driver not initialized.";
-                }
+Size: {selectedResult.Size}
+Seeds: {selectedResult.Seeds}
+Leeches: {selectedResult.Leeches}
+Author: {selectedResult.Author}
+Date: {selectedResult.Date}
 
-                try
-                {
-                    driver.Navigate().GoToUrl(selectedResult.Link);
+Link: {selectedResult.Link}
+Download: {selectedResult.DownloadUrl}
 
-                    // Wait for the post body div to be present
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-                    var postBodyElement = wait.Until(d => d.FindElement(By.CssSelector("div.post_body")));
-
-                    // Return the text content of the post body div
-                    return postBodyElement.Text;
-        }
-        catch (Exception ex)
-        {
-                     Dispatcher.Invoke(() => MessageBox.Show($"Error scraping details: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error));
-                     return $"Error scraping details: {ex.Message}";
-                }
-            });
-        }
-        finally
-        {
-             // Close progress window on UI thread
-            await Dispatcher.InvokeAsync(() =>
-            {
-                progressWindow.Close();
-            });
-        }
+Note: Detailed description fetching via HTTP will be implemented in a future update.
+Currently showing basic information from search results.";
 
         // Show details in a new window on UI thread
-        await Dispatcher.InvokeAsync(() =>
-        {
-            var detailsWindow = new Details();
-            detailsWindow.Owner = this;
-            detailsWindow.SetDetailsText(detailsText);
-            detailsWindow.ShowDialog(); // Use ShowDialog to make it modal
-        });
+        var detailsWindow = new Details();
+        detailsWindow.Owner = this;
+        detailsWindow.SetDetailsText(detailsText);
+        detailsWindow.ShowDialog();
     }
 }
 
-public class SearchResult
-{
-    public string Title { get; set; }
-    public string Link { get; set; }
-    public string TopicId { get; set; }
-    public string Size { get; set; }
-    public string ImageUrl { get; set; }
-}
+// SearchResult class removed - now using TorrentSearchResult from Models

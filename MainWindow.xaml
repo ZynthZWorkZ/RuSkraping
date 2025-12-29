@@ -315,8 +315,32 @@
 
                         <!-- Options -->
                         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,15,0,0">
-                            <CheckBox x:Name="UseCookiesCheckBox" Content="Use Cookies" IsChecked="True"/>
-                            <CheckBox x:Name="FetchImagesCheckBox" Content="Fetch Images" IsChecked="False"/>
+                            <Button x:Name="LoginButton" Click="LoginButton_Click" 
+                                    Margin="0,0,10,0" Padding="10,5">
+                                <StackPanel Orientation="Horizontal">
+                                    <fa:FontAwesome Icon="SignIn" Margin="0,0,5,0"/>
+                                    <TextBlock Text="Login"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="CheckAuthButton" Click="CheckAuthButton_Click" 
+                                    Margin="0,0,10,0" Padding="10,5">
+                                <StackPanel Orientation="Horizontal">
+                                    <fa:FontAwesome Icon="CheckCircle" Margin="0,0,5,0"/>
+                                    <TextBlock Text="Check Auth"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="ExportCookiesButton" Click="ExportCookiesButton_Click" 
+                                    Margin="0,0,10,0" Padding="10,5">
+                                <StackPanel Orientation="Horizontal">
+                                    <fa:FontAwesome Icon="Download" Margin="0,0,5,0"/>
+                                    <TextBlock Text="Export Cookies"/>
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Text="🚀 Now using HTTP-based search (no ChromeDriver!)" 
+                                      Foreground="{StaticResource SuccessBrush}" 
+                                      VerticalAlignment="Center"
+                                      FontSize="12"
+                                      Margin="10,0,0,0"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -326,26 +350,17 @@
                     <ListView x:Name="ResultsListView" Margin="10">
                         <ListView.View>
                             <GridView>
-                                <GridViewColumn Header="Image" Width="80">
-                                    <GridViewColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <Border Width="60" Height="60" CornerRadius="6" Background="#1A1A1A" Margin="2">
-                                                <Image Source="{Binding ImageUrl}" Stretch="Uniform"/>
-                                            </Border>
-                                        </DataTemplate>
-                                    </GridViewColumn.CellTemplate>
-                                </GridViewColumn>
-                                <GridViewColumn Header="Title" Width="600">
+                                <GridViewColumn Header="Title" Width="450">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding Title}" 
                                                      TextWrapping="Wrap" 
                                                      Foreground="{StaticResource TextPrimaryBrush}"
-                                                     MaxWidth="580"/>
+                                                     MaxWidth="430"/>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
-                                <GridViewColumn Header="Size" Width="100">
+                                <GridViewColumn Header="Size" Width="80">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding Size}" 
@@ -353,7 +368,43 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
-                                <GridViewColumn Header="Topic ID" Width="100">
+                                <GridViewColumn Header="Seeds" Width="60">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Seeds}" 
+                                                     Foreground="{StaticResource SuccessBrush}"
+                                                     FontWeight="SemiBold"
+                                                     HorizontalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Leeches" Width="60">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Leeches}" 
+                                                     Foreground="{StaticResource DangerBrush}"
+                                                     FontWeight="SemiBold"
+                                                     HorizontalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Author" Width="120">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Author}" 
+                                                     Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Date" Width="100">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Date}" 
+                                                     Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="ID" Width="80">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding TopicId}" 
@@ -361,18 +412,32 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
-                                <GridViewColumn Width="60">
+                                <GridViewColumn Header="Actions" Width="100">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
-                                            <Button x:Name="DetailsButton" 
-                                                    Click="DetailsButton_Click" 
-                                                    Width="32" Height="32" 
-                                                    Padding="0"
-                                                    Background="Transparent"
-                                                    BorderThickness="0">
-                                                <fa:FontAwesome Icon="Info" 
-                                                              Foreground="{StaticResource AccentBrush}"/>
-                                            </Button>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                <Button x:Name="DownloadButton" 
+                                                        Click="DownloadButton_Click" 
+                                                        Width="32" Height="32" 
+                                                        Padding="0"
+                                                        Margin="0,0,5,0"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        ToolTip="Download torrent file">
+                                                    <fa:FontAwesome Icon="Download" 
+                                                                  Foreground="{StaticResource SuccessBrush}"/>
+                                                </Button>
+                                                <Button x:Name="DetailsButton" 
+                                                        Click="DetailsButton_Click" 
+                                                        Width="32" Height="32" 
+                                                        Padding="0"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        ToolTip="View details">
+                                                    <fa:FontAwesome Icon="Info" 
+                                                                  Foreground="{StaticResource AccentBrush}"/>
+                                                </Button>
+                                            </StackPanel>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
@@ -403,14 +468,14 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
                     <Button x:Name="GetMagnetButton" Click="GetMagnetButton_Click" Margin="0,0,15,0">
                         <StackPanel Orientation="Horizontal">
-                            <fa:FontAwesome Icon="Magnet" Margin="0,0,8,0"/>
-                            <TextBlock Text="Get Magnet Link"/>
+                            <fa:FontAwesome Icon="Download" Margin="0,0,8,0"/>
+                            <TextBlock Text="Copy Download Link"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="OpenMagnetButton" Click="OpenMagnetButton_Click">
                         <StackPanel Orientation="Horizontal">
                             <fa:FontAwesome Icon="ExternalLink" Margin="0,0,8,0"/>
-                            <TextBlock Text="Open Magnet"/>
+                            <TextBlock Text="Open Link"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
