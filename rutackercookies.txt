@@ -1,6 +1,0 @@
-bb_guid =
-bb_session =
-bb_ssl =
-bb_t =
-cf_clearance =
-VID =

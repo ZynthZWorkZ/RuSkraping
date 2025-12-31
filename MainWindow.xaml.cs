@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Ookii.Dialogs.Wpf;
 using RuSkraping.Models;
 using RuSkraping.Services;
 
@@ -585,6 +586,216 @@ Currently showing basic information from search results.";
         detailsWindow.Owner = this;
         detailsWindow.SetDetailsText(detailsText);
         detailsWindow.ShowDialog();
+    }
+
+    private async void DownloadAllButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Check if there are results
+        if (searchResults == null || searchResults.Count == 0)
+        {
+            MessageBox.Show("No search results to download. Please perform a search first.", 
+                "No Results", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // Filter results that have download URLs
+        var downloadableResults = searchResults.Where(r => !string.IsNullOrEmpty(r.DownloadUrl)).ToList();
+        if (downloadableResults.Count == 0)
+        {
+            MessageBox.Show("No results with download links available.", 
+                "No Downloadable Results", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        // Show folder browser dialog
+        var folderDialog = new VistaFolderBrowserDialog
+        {
+            Description = "Select a folder to save all torrent files",
+            UseDescriptionForTitle = true
+        };
+
+        if (folderDialog.ShowDialog() != true)
+        {
+            return; // User cancelled
+        }
+
+        string downloadFolder = folderDialog.SelectedPath;
+        if (string.IsNullOrEmpty(downloadFolder) || !Directory.Exists(downloadFolder))
+        {
+            MessageBox.Show("Invalid folder selected.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        // Disable button during download
+        DownloadAllButton.IsEnabled = false;
+        var originalStatus = StatusText.Text;
+
+        // Create and show progress window
+        var progressWindow = new Progress();
+        progressWindow.Owner = this;
+        progressWindow.Show();
+        progressWindow.StartFakeAnimation();
+
+        // Create cancellation token source
+        var cancellationTokenSource = new CancellationTokenSource();
+
+        // Run downloads in background thread
+        await Task.Run(async () =>
+        {
+            try
+            {
+                await PerformDownloadAll(downloadableResults, downloadFolder, cancellationTokenSource.Token, progressWindow);
+            }
+            catch (OperationCanceledException)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    StatusText.Text = "Download stopped.";
+                });
+            }
+            catch (Exception ex)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            }
+            finally
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    DownloadAllButton.IsEnabled = true;
+                    progressWindow.Close();
+                });
+            }
+        });
+    }
+
+    private async Task PerformDownloadAll(List<TorrentSearchResult> results, string downloadFolder, CancellationToken cancellationToken, Progress progressWindow)
+    {
+        int totalCount = results.Count;
+        int successCount = 0;
+        int failedCount = 0;
+        var failedItems = new List<string>();
+
+        // Update status on UI thread
+        await Dispatcher.InvokeAsync(() =>
+        {
+            StatusText.Text = $"Starting download of {totalCount} files...";
+        });
+
+        for (int i = 0; i < results.Count; i++)
+        {
+            // Check for cancellation
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var result = results[i];
+            int currentIndex = i + 1;
+
+            try
+            {
+                // Update progress status
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    string shortTitle = result.Title.Length > 50 
+                        ? result.Title.Substring(0, 50) + "..." 
+                        : result.Title;
+                    progressWindow.UpdateProgress(
+                        (double)(i * 100) / totalCount,
+                        $"Downloading {currentIndex} of {totalCount}: {shortTitle}");
+                    StatusText.Text = $"Downloading {currentIndex} of {totalCount}: {shortTitle}";
+                });
+
+                // Validate download URL
+                if (string.IsNullOrEmpty(result.DownloadUrl))
+                {
+                    failedCount++;
+                    failedItems.Add($"{result.Title} (No download URL)");
+                    continue;
+                }
+
+                // Download the torrent file
+                byte[] torrentData = await searchService!.DownloadTorrentAsync(result.DownloadUrl, cancellationToken);
+
+                // Generate filename
+                string sanitizedTitle = SanitizeFileName(result.Title);
+                string fileName = $"{result.TopicId}_{sanitizedTitle}.torrent";
+                string filePath = GetUniqueFilePath(downloadFolder, fileName);
+
+                // Save to file
+                await File.WriteAllBytesAsync(filePath, torrentData, cancellationToken);
+
+                successCount++;
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // Re-throw to stop the loop
+            }
+            catch (Exception ex)
+            {
+                failedCount++;
+                string errorMessage = ex.Message;
+                failedItems.Add($"{result.Title} ({errorMessage})");
+            }
+        }
+
+        // Final progress update
+        progressWindow.UpdateProgress(100, $"Complete! Downloaded {successCount} of {totalCount} files");
+
+        // Show completion summary on UI thread
+        await Dispatcher.InvokeAsync(() =>
+        {
+            string summaryMessage = $"Download complete!\n\n" +
+                                   $"Successfully downloaded: {successCount} files\n" +
+                                   $"Failed: {failedCount} files\n" +
+                                   $"Total: {totalCount} files";
+
+            if (failedCount > 0 && failedItems.Count > 0)
+            {
+                // Show first 10 failed items
+                int itemsToShow = Math.Min(10, failedItems.Count);
+                summaryMessage += $"\n\nFailed items:\n";
+                for (int i = 0; i < itemsToShow; i++)
+                {
+                    summaryMessage += $"- {failedItems[i]}\n";
+                }
+                if (failedItems.Count > 10)
+                {
+                    summaryMessage += $"... and {failedItems.Count - 10} more";
+                }
+            }
+
+            MessageBox.Show(summaryMessage, "Download Complete", MessageBoxButton.OK, 
+                failedCount == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            
+            StatusText.Text = $"Downloaded {successCount} of {totalCount} files to {Path.GetFileName(downloadFolder)}";
+        });
+    }
+
+    private string GetUniqueFilePath(string folder, string fileName)
+    {
+        string filePath = Path.Combine(folder, fileName);
+        
+        // If file doesn't exist, return the original path
+        if (!File.Exists(filePath))
+        {
+            return filePath;
+        }
+
+        // File exists, generate unique name
+        string fileNameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+        string extension = Path.GetExtension(fileName);
+        int counter = 1;
+
+        do
+        {
+            string newFileName = $"{fileNameWithoutExt} ({counter}){extension}";
+            filePath = Path.Combine(folder, newFileName);
+            counter++;
+        }
+        while (File.Exists(filePath));
+
+        return filePath;
     }
 }
 

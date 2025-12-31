@@ -23,6 +23,11 @@
     <PackageReference Include="Selenium.Support" Version="4.15.0" />
     <PackageReference Include="FontAwesome.WPF" Version="4.7.0.9" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="Ookii.Dialogs.Wpf" Version="5.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Montalban.otf" />
   </ItemGroup>
 
 </Project>
