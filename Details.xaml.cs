@@ -1,5 +1,7 @@
+using System;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using System.Threading.Tasks;
 using GTranslate.Translators;
 using GTranslate;
@@ -34,6 +36,40 @@ namespace RuSkraping
             DetailsTextBlock.Text = details;
             _isTranslated = false;
             _isTransliterated = false;
+        }
+
+        // Method to set the details with image
+        public void SetDetailsWithImage(string details, string imageUrl)
+        {
+            _originalText = details;
+            DetailsTextBlock.Text = details;
+            _isTranslated = false;
+            _isTransliterated = false;
+            
+            // Load image if URL is provided
+            if (!string.IsNullOrEmpty(imageUrl))
+            {
+                try
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(imageUrl, UriKind.Absolute);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+                    
+                    TorrentImage.Source = bitmap;
+                    ImageBorder.Visibility = Visibility.Visible;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to load image: {ex.Message}");
+                    ImageBorder.Visibility = Visibility.Collapsed;
+                }
+            }
+            else
+            {
+                ImageBorder.Visibility = Visibility.Collapsed;
+            }
         }
 
         private async void TranslateButton_Click(object sender, RoutedEventArgs e)

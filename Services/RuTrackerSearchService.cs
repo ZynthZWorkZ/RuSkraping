@@ -321,6 +321,221 @@ public class RuTrackerSearchService : IDisposable
     }
 
     /// <summary>
+    /// Fetches detailed torrent information from the viewtopic page
+    /// </summary>
+    /// <param name="topicId">The topic ID of the torrent</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Updated TorrentSearchResult with magnet URL, image, and description</returns>
+    public async Task<(string magnetUrl, string imageUrl, string description)> FetchTorrentDetailsAsync(
+        string topicId, 
+        CancellationToken cancellationToken = default)
+    {
+        string magnetUrl = string.Empty;
+        string imageUrl = string.Empty;
+        string description = string.Empty;
+
+        try
+        {
+            // Build the viewtopic URL
+            string viewTopicUrl = $"{BaseUrl}/forum/viewtopic.php?t={topicId}";
+
+            // Create request
+            var request = new HttpRequestMessage(HttpMethod.Get, viewTopicUrl);
+            request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+            request.Headers.Add("Accept-Encoding", "identity");
+            request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+            request.Headers.Add("Referer", $"{BaseUrl}/forum/tracker.php");
+            request.Headers.Add("Cache-Control", "max-age=0");
+            request.Headers.Add("Upgrade-Insecure-Requests", "1");
+
+            // Send request
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to fetch details for topic {topicId}: {response.StatusCode}");
+                return (magnetUrl, imageUrl, description);
+            }
+
+            // Decode response
+            string htmlContent = await DecodeResponseAsync(response);
+
+            // Extract magnet URL
+            magnetUrl = ExtractMagnetUrl(htmlContent);
+
+            // Extract image URL
+            imageUrl = ExtractImageUrl(htmlContent);
+
+            // Extract description
+            description = ExtractDescription(htmlContent);
+
+            System.Diagnostics.Debug.WriteLine($"Fetched details for topic {topicId}:");
+            System.Diagnostics.Debug.WriteLine($"  Magnet: {(string.IsNullOrEmpty(magnetUrl) ? "Not found" : "Found")}");
+            System.Diagnostics.Debug.WriteLine($"  Image: {(string.IsNullOrEmpty(imageUrl) ? "Not found" : "Found")}");
+            System.Diagnostics.Debug.WriteLine($"  Description: {description.Length} chars");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error fetching details for topic {topicId}: {ex.Message}");
+        }
+
+        return (magnetUrl, imageUrl, description);
+    }
+
+    /// <summary>
+    /// Extracts magnet URL from HTML content
+    /// </summary>
+    private string ExtractMagnetUrl(string htmlContent)
+    {
+        try
+        {
+            // Pattern: <a href="magnet:?xt=urn:btih:..." class="med magnet-link"
+            var magnetPattern = new Regex(@"<a[^>]*class=""[^""]*magnet-link[^""]*""[^>]*href=""(magnet:[^""]+)""", RegexOptions.Singleline);
+            var match = magnetPattern.Match(htmlContent);
+
+            if (match.Success)
+            {
+                string magnetUrl = match.Groups[1].Value;
+                // Decode HTML entities
+                magnetUrl = System.Net.WebUtility.HtmlDecode(magnetUrl);
+                return magnetUrl;
+            }
+
+            // Alternative pattern: href first, then class
+            var alternatePattern = new Regex(@"<a[^>]*href=""(magnet:[^""]+)""[^>]*class=""[^""]*magnet-link[^""]*""", RegexOptions.Singleline);
+            match = alternatePattern.Match(htmlContent);
+
+            if (match.Success)
+            {
+                string magnetUrl = match.Groups[1].Value;
+                magnetUrl = System.Net.WebUtility.HtmlDecode(magnetUrl);
+                return magnetUrl;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error extracting magnet URL: {ex.Message}");
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// Extracts image URL from HTML content
+    /// </summary>
+    private string ExtractImageUrl(string htmlContent)
+    {
+        try
+        {
+            // Pattern 1: class contains "postImg" (anywhere in class value), then src
+            // Matches: class="postImg", class="postImg postImgAligned img-right", etc.
+            var imagePattern = new Regex(@"<img[^>]*class=""[^""]*postImg[^""]*""[^>]*src=""([^""]+)""", RegexOptions.Singleline);
+            var match = imagePattern.Match(htmlContent);
+
+            if (match.Success)
+            {
+                return match.Groups[1].Value;
+            }
+
+            // Pattern 2: src first, then class contains "postImg"
+            var alternatePattern = new Regex(@"<img[^>]*src=""([^""]+)""[^>]*class=""[^""]*postImg[^""]*""", RegexOptions.Singleline);
+            match = alternatePattern.Match(htmlContent);
+
+            if (match.Success)
+            {
+                return match.Groups[1].Value;
+            }
+
+            // Pattern 3: Just look for any img tag with postImg in the class attribute
+            var simplePattern = new Regex(@"<img[^>]*\bclass=""[^""]*postImg[^""]*""[^>]*>", RegexOptions.Singleline);
+            match = simplePattern.Match(htmlContent);
+
+            if (match.Success)
+            {
+                // Extract src from the matched img tag
+                var srcPattern = new Regex(@"src=""([^""]+)""");
+                var srcMatch = srcPattern.Match(match.Value);
+                if (srcMatch.Success)
+                {
+                    return srcMatch.Groups[1].Value;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error extracting image URL: {ex.Message}");
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// Extracts description/post content from HTML and converts to clean text
+    /// </summary>
+    private string ExtractDescription(string htmlContent)
+    {
+        try
+        {
+            // Pattern: Find the post body content
+            var postBodyPattern = new Regex(@"<div class=""post_body""[^>]*>(.*?)</div>\s*</td>", RegexOptions.Singleline);
+            var match = postBodyPattern.Match(htmlContent);
+
+            if (match.Success)
+            {
+                string rawDescription = match.Groups[1].Value;
+                
+                // Remove script tags
+                rawDescription = Regex.Replace(rawDescription, @"<script[^>]*>.*?</script>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                
+                // Remove style tags
+                rawDescription = Regex.Replace(rawDescription, @"<style[^>]*>.*?</style>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                
+                // Remove image tags (we extract images separately)
+                rawDescription = Regex.Replace(rawDescription, @"<img[^>]*>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                
+                // Convert <br> tags to newlines
+                rawDescription = Regex.Replace(rawDescription, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase);
+                
+                // Convert </p> and </div> to double newlines for paragraphs
+                rawDescription = Regex.Replace(rawDescription, @"</p>", "\n\n", RegexOptions.IgnoreCase);
+                rawDescription = Regex.Replace(rawDescription, @"</div>", "\n", RegexOptions.IgnoreCase);
+                
+                // Convert <li> to bullet points
+                rawDescription = Regex.Replace(rawDescription, @"<li[^>]*>", "• ", RegexOptions.IgnoreCase);
+                rawDescription = Regex.Replace(rawDescription, @"</li>", "\n", RegexOptions.IgnoreCase);
+                
+                // Remove all remaining HTML tags
+                rawDescription = Regex.Replace(rawDescription, @"<[^>]+>", "", RegexOptions.Singleline);
+                
+                // Decode HTML entities
+                rawDescription = System.Net.WebUtility.HtmlDecode(rawDescription);
+                
+                // Clean up whitespace
+                rawDescription = Regex.Replace(rawDescription, @"[ \t]+", " "); // Multiple spaces to single
+                rawDescription = Regex.Replace(rawDescription, @"\n[ \t]+", "\n"); // Remove leading spaces on lines
+                rawDescription = Regex.Replace(rawDescription, @"[ \t]+\n", "\n"); // Remove trailing spaces on lines
+                rawDescription = Regex.Replace(rawDescription, @"\n{3,}", "\n\n"); // Max 2 consecutive newlines
+                
+                rawDescription = rawDescription.Trim();
+                
+                // Limit length for display
+                if (rawDescription.Length > 5000)
+                {
+                    rawDescription = rawDescription.Substring(0, 5000) + "...";
+                }
+                
+                return rawDescription;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error extracting description: {ex.Message}");
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
     /// Downloads a torrent file
     /// </summary>
     public async Task<byte[]> DownloadTorrentAsync(string downloadUrl, CancellationToken cancellationToken = default)

@@ -471,20 +471,20 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
                     <Button x:Name="GetMagnetButton" Click="GetMagnetButton_Click" Margin="0,0,15,0">
                         <StackPanel Orientation="Horizontal">
-                            <fa:FontAwesome Icon="Download" Margin="0,0,8,0"/>
-                            <TextBlock Text="Copy Download Link"/>
+                            <fa:FontAwesome Icon="Magnet" Margin="0,0,8,0"/>
+                            <TextBlock Text="Get Magnet Link"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="OpenMagnetButton" Click="OpenMagnetButton_Click" Margin="0,0,15,0">
+                    <Button x:Name="OpenMagnetButton" Click="OpenMagnetButton_Click" Margin="0,0,15,0" IsEnabled="False">
                         <StackPanel Orientation="Horizontal">
                             <fa:FontAwesome Icon="ExternalLink" Margin="0,0,8,0"/>
-                            <TextBlock Text="Open Link"/>
+                            <TextBlock Text="Open in Torrent Client"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="DownloadAllButton" Click="DownloadAllButton_Click">
                         <StackPanel Orientation="Horizontal">
                             <fa:FontAwesome Icon="Download" Margin="0,0,8,0"/>
-                            <TextBlock Text="Download All Results"/>
+                            <TextBlock Text="Download All Torrents"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>

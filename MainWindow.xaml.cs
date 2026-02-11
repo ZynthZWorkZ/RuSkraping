@@ -320,19 +320,51 @@ public partial class MainWindow : Window
 
         var selectedResult = (TorrentSearchResult)ResultsListView.SelectedItem;
         
-        // Check if download URL is available (from rusearch parsing)
-        if (!string.IsNullOrEmpty(selectedResult.DownloadUrl))
+        // Check if magnet URL is already cached
+        if (!string.IsNullOrEmpty(selectedResult.MagnetUrl))
         {
-            // Use the direct download URL as "magnet" (it's actually the torrent file download link)
-            currentMagnetLink = selectedResult.DownloadUrl;
+            currentMagnetLink = selectedResult.MagnetUrl;
             Clipboard.SetText(currentMagnetLink);
-            StatusText.Text = "Download link copied to clipboard!";
+            StatusText.Text = "Magnet link copied to clipboard!";
             OpenMagnetButton.IsEnabled = true;
+            return;
         }
-        else
+
+        // Disable button while fetching
+        GetMagnetButton.IsEnabled = false;
+        StatusText.Text = $"Fetching magnet link for: {selectedResult.Title.Substring(0, Math.Min(50, selectedResult.Title.Length))}...";
+
+        try
         {
-            MessageBox.Show("No download link available for this torrent.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-            StatusText.Text = "No download link available.";
+            // Fetch torrent details including magnet URL
+            var (magnetUrl, imageUrl, description) = await searchService!.FetchTorrentDetailsAsync(selectedResult.TopicId);
+            
+            if (!string.IsNullOrEmpty(magnetUrl))
+            {
+                // Cache the details in the result object
+                selectedResult.MagnetUrl = magnetUrl;
+                selectedResult.ImageUrl = imageUrl;
+                selectedResult.Description = description;
+                
+                currentMagnetLink = magnetUrl;
+                Clipboard.SetText(currentMagnetLink);
+                StatusText.Text = "Magnet link copied to clipboard!";
+                OpenMagnetButton.IsEnabled = true;
+            }
+            else
+            {
+                MessageBox.Show("Could not find magnet link for this torrent.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                StatusText.Text = "No magnet link found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error fetching magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText.Text = "Failed to fetch magnet link.";
+        }
+        finally
+        {
+            GetMagnetButton.IsEnabled = true;
         }
     }
 
@@ -341,25 +373,30 @@ public partial class MainWindow : Window
         // Access currentMagnetLink (not a UI element, so no dispatcher needed)
         if (string.IsNullOrEmpty(currentMagnetLink))
         {
-            MessageBox.Show("No magnet link available.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("No magnet link available. Please click 'Get Magnet Link' first.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         try
         {
-            // Starting a process doesn't typically need dispatcher unless it interacts with UI elements immediately after.
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            // Open magnet link with default torrent client
+            var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = currentMagnetLink,
                 UseShellExecute = true
-            });
+            };
+            
+            System.Diagnostics.Process.Start(psi);
+            
             // Update status on UI thread
-            StatusText.Text = "Opening magnet link...";
+            StatusText.Text = "Opened magnet link in default torrent client.";
         }
         catch (Exception ex)
         {
             // Show error message on UI thread
-            MessageBox.Show($"Could not open magnet link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Could not open magnet link: {ex.Message}\n\nMake sure you have a torrent client installed (e.g., qBittorrent, uTorrent, etc.)", 
+                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText.Text = "Failed to open magnet link.";
         }
     }
 
@@ -564,28 +601,73 @@ public partial class MainWindow : Window
             return; // Should not happen if button is in ListView item template
         }
 
-        // For now, show basic details from what we already have
-        // TODO: Implement HTTP-based detail fetching in future
-        string detailsText = $@"Topic ID: {selectedResult.TopicId}
+        // Disable button while fetching
+        button.IsEnabled = false;
+        var originalStatus = StatusText.Text;
+        StatusText.Text = "Fetching torrent details...";
+
+        try
+        {
+            // Fetch details if not already cached
+            if (string.IsNullOrEmpty(selectedResult.MagnetUrl) || string.IsNullOrEmpty(selectedResult.Description))
+            {
+                var (magnetUrl, imageUrl, description) = await searchService!.FetchTorrentDetailsAsync(selectedResult.TopicId);
+                
+                // Cache the details
+                if (!string.IsNullOrEmpty(magnetUrl))
+                    selectedResult.MagnetUrl = magnetUrl;
+                if (!string.IsNullOrEmpty(imageUrl))
+                    selectedResult.ImageUrl = imageUrl;
+                if (!string.IsNullOrEmpty(description))
+                    selectedResult.Description = description;
+            }
+
+            // Build details text with all available information
+            string detailsText = $@"═══════════════════════════════════════════════════════
+ TORRENT INFORMATION
+═══════════════════════════════════════════════════════
+
 Title: {selectedResult.Title}
 
+Topic ID: {selectedResult.TopicId}
 Size: {selectedResult.Size}
-Seeds: {selectedResult.Seeds}
-Leeches: {selectedResult.Leeches}
+Seeds: {selectedResult.Seeds} | Leeches: {selectedResult.Leeches}
 Author: {selectedResult.Author}
 Date: {selectedResult.Date}
 
-Link: {selectedResult.Link}
-Download: {selectedResult.DownloadUrl}
+═══════════════════════════════════════════════════════
+ LINKS
+═══════════════════════════════════════════════════════
 
-Note: Detailed description fetching via HTTP will be implemented in a future update.
-Currently showing basic information from search results.";
+Page: {selectedResult.Link}
 
-        // Show details in a new window on UI thread
-        var detailsWindow = new Details();
-        detailsWindow.Owner = this;
-        detailsWindow.SetDetailsText(detailsText);
-        detailsWindow.ShowDialog();
+Download: {(string.IsNullOrEmpty(selectedResult.DownloadUrl) ? "Not available" : selectedResult.DownloadUrl)}
+
+Magnet: {(string.IsNullOrEmpty(selectedResult.MagnetUrl) ? "Not available" : selectedResult.MagnetUrl)}
+
+═══════════════════════════════════════════════════════
+ DESCRIPTION
+═══════════════════════════════════════════════════════
+
+{(string.IsNullOrEmpty(selectedResult.Description) ? "No description available." : selectedResult.Description)}";
+
+            // Show details in a new window on UI thread
+            var detailsWindow = new Details();
+            detailsWindow.Owner = this;
+            detailsWindow.SetDetailsWithImage(detailsText, selectedResult.ImageUrl);
+            detailsWindow.ShowDialog();
+            
+            StatusText.Text = originalStatus;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error fetching details: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText.Text = "Failed to fetch details.";
+        }
+        finally
+        {
+            button.IsEnabled = true;
+        }
     }
 
     private async void DownloadAllButton_Click(object sender, RoutedEventArgs e)

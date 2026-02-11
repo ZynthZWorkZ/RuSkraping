@@ -96,6 +96,7 @@ public partial class LoginWindow : Window
 
         // Disable UI during login
         LoginButton.IsEnabled = false;
+        ManualLoginButton.IsEnabled = false;
         CancelButton.IsEnabled = false;
         UsernameTextBox.IsEnabled = false;
         PasswordBox.IsEnabled = false;
@@ -106,7 +107,8 @@ public partial class LoginWindow : Window
         {
             // Perform login
             var loginService = new RuTrackerLoginService();
-            var result = await loginService.LoginAsync(Username, Password);
+            bool showBrowser = ShowBrowserCheckBox.IsChecked ?? false;
+            var result = await loginService.LoginAsync(Username, Password, showBrowser: showBrowser);
 
             if (result.Success && result.Cookies.Count > 0)
             {
@@ -134,6 +136,7 @@ public partial class LoginWindow : Window
                 
                 // Re-enable UI
                 LoginButton.IsEnabled = true;
+                ManualLoginButton.IsEnabled = true;
                 CancelButton.IsEnabled = true;
                 UsernameTextBox.IsEnabled = true;
                 PasswordBox.IsEnabled = true;
@@ -148,9 +151,75 @@ public partial class LoginWindow : Window
             
             // Re-enable UI
             LoginButton.IsEnabled = true;
+            ManualLoginButton.IsEnabled = true;
             CancelButton.IsEnabled = true;
             UsernameTextBox.IsEnabled = true;
             PasswordBox.IsEnabled = true;
+        }
+    }
+
+    private async void ManualLoginButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Disable UI during manual login
+        LoginButton.IsEnabled = false;
+        ManualLoginButton.IsEnabled = false;
+        CancelButton.IsEnabled = false;
+        UsernameTextBox.IsEnabled = false;
+        PasswordBox.IsEnabled = false;
+        ShowBrowserCheckBox.IsEnabled = false;
+        StatusText.Text = "Opening browser... Please login manually and click OK when done.";
+        StatusText.Visibility = Visibility.Visible;
+
+        try
+        {
+            // Perform manual login
+            var loginService = new RuTrackerLoginService();
+            var result = await loginService.ManualLoginAsync();
+
+            if (result.Success && result.Cookies.Count > 0)
+            {
+                // Save cookies (no credentials since user logged in manually)
+                CookieStorage.SaveCookies(result.Cookies);
+                Cookies = result.Cookies;
+        
+                LoginSuccessful = true;
+                StatusText.Text = "Manual login successful!";
+                
+                await Task.Delay(500); // Brief delay to show success message
+                
+                DialogResult = true;
+                Close();
+            }
+            else
+            {
+                StatusText.Text = "Manual login was cancelled or failed.";
+                StatusText.Visibility = Visibility.Visible;
+                MessageBox.Show("Manual login was cancelled or no cookies were obtained.", 
+                    "Login Cancelled", MessageBoxButton.OK, MessageBoxImage.Information);
+                
+                // Re-enable UI
+                LoginButton.IsEnabled = true;
+                ManualLoginButton.IsEnabled = true;
+                CancelButton.IsEnabled = true;
+                UsernameTextBox.IsEnabled = true;
+                PasswordBox.IsEnabled = true;
+                ShowBrowserCheckBox.IsEnabled = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "An error occurred during manual login.";
+            StatusText.Visibility = Visibility.Visible;
+            MessageBox.Show($"An error occurred during manual login: {ex.Message}", 
+                "Login Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            
+            // Re-enable UI
+            LoginButton.IsEnabled = true;
+            ManualLoginButton.IsEnabled = true;
+            CancelButton.IsEnabled = true;
+            UsernameTextBox.IsEnabled = true;
+            PasswordBox.IsEnabled = true;
+            ShowBrowserCheckBox.IsEnabled = true;
         }
     }
 }

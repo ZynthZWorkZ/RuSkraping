@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:RuSkraping"
         xmlns:fa="http://schemas.fontawesome.io/icons/"
         mc:Ignorable="d"
-        Title="RuTracker Login" Height="400" Width="450"
+        Title="RuTracker Login" Height="510" Width="450"
         WindowStartupLocation="CenterOwner"
         Background="Transparent"
         BorderThickness="0"
@@ -130,6 +130,43 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal">
+                            <Border x:Name="checkBoxBorder" 
+                                    Width="18" Height="18" 
+                                    Background="{StaticResource SecondaryBrush}"
+                                    BorderBrush="{StaticResource TextSecondaryBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="4">
+                                <Path x:Name="checkMark"
+                                      Data="M9.86364 15.5L3.5 9.13636L4.97727 7.65909L9.86364 12.5455L19.0227 3.38636L20.5 4.86364L9.86364 15.5Z"
+                                      Fill="{StaticResource TextPrimaryBrush}"
+                                      Stretch="Uniform"
+                                      Width="10" Height="10"
+                                      Visibility="Collapsed"/>
+                            </Border>
+                            <ContentPresenter Margin="8,0,0,0" 
+                                            VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="checkBoxBorder" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="checkBoxBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="checkMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="checkBoxBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border CornerRadius="16" Background="{StaticResource WindowBackgroundGradient}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
@@ -168,6 +205,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -193,10 +231,18 @@
 
                 <PasswordBox x:Name="PasswordBox" 
                             Grid.Row="4" 
-                            Margin="0,0,0,10"/>
+                            Margin="0,0,0,20"/>
+
+                <CheckBox x:Name="ShowBrowserCheckBox" 
+                         Grid.Row="5"
+                         Content="Show browser window during login (for debugging)"
+                         Foreground="{StaticResource TextSecondaryBrush}"
+                         FontSize="12"
+                         Margin="0,0,0,15"
+                         IsChecked="False"/>
 
                 <TextBlock x:Name="StatusText" 
-                          Grid.Row="5" 
+                          Grid.Row="6" 
                           Text="" 
                           Foreground="{StaticResource AccentBrush}" 
                           FontSize="12" 
@@ -204,14 +250,35 @@
                           TextWrapping="Wrap"
                           Visibility="Collapsed"/>
 
-                <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                    <Button x:Name="CancelButton" Click="CancelButton_Click" Margin="0,0,10,0" Padding="15,10">
-                        <TextBlock Text="Cancel"/>
-                    </Button>
-                    <Button x:Name="LoginButton" Click="LoginButton_Click" Padding="15,10">
-                        <StackPanel Orientation="Horizontal">
-                            <fa:FontAwesome Icon="SignIn" Margin="0,0,8,0"/>
-                            <TextBlock Text="Login"/>
+                <StackPanel Grid.Row="7" Orientation="Vertical" VerticalAlignment="Bottom">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+                        <Button x:Name="CancelButton" Click="CancelButton_Click" Margin="0,0,10,0" Padding="15,10">
+                            <TextBlock Text="Cancel"/>
+                        </Button>
+                        <Button x:Name="LoginButton" Click="LoginButton_Click" Padding="15,10">
+                            <StackPanel Orientation="Horizontal">
+                                <fa:FontAwesome Icon="SignIn" Margin="0,0,8,0"/>
+                                <TextBlock Text="Auto Login"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                    
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="— or —" 
+                                  Foreground="{StaticResource TextSecondaryBrush}" 
+                                  FontSize="11" 
+                                  Margin="0,0,0,10"
+                                  VerticalAlignment="Center"/>
+                    </StackPanel>
+                    
+                    <Button x:Name="ManualLoginButton" 
+                            Click="ManualLoginButton_Click" 
+                            Padding="15,10"
+                            Background="{StaticResource SecondaryBrush}"
+                            HorizontalAlignment="Stretch">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <fa:FontAwesome Icon="Globe" Margin="0,0,8,0"/>
+                            <TextBlock Text="Manual Login (Browser)"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>

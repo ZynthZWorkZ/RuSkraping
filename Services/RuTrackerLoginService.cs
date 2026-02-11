@@ -35,7 +35,8 @@ public class RuTrackerLoginService
     /// Gets cookies from the website using Selenium (handles Cloudflare challenge)
     /// Returns the driver so it can be reused for importing cookies later
     /// </summary>
-    public async Task<(List<CookieData> cookies, ChromeDriver driver)> GetCookiesBeforeLoginAsync()
+    /// <param name="showBrowser">If true, shows the browser window during login (false = headless mode)</param>
+    public async Task<(List<CookieData> cookies, ChromeDriver driver)> GetCookiesBeforeLoginAsync(bool showBrowser = false)
     {
         // Configure ChromeDriverService similar to SRXMDL pattern
         var chromeDriverService = ChromeDriverService.CreateDefaultService();
@@ -51,9 +52,12 @@ public class RuTrackerLoginService
             chromeOptions.BinaryLocation = chromePath;
         }
         
-        // Use headless mode to avoid conflicts with existing Chrome instances
+        // Use headless mode to avoid conflicts with existing Chrome instances (unless user wants to see the browser)
+        if (!showBrowser)
+        {
         chromeOptions.AddArgument("--headless=new");
         chromeOptions.AddArgument("--disable-gpu");
+        }
         chromeOptions.AddArgument("--no-sandbox");
         chromeOptions.AddArgument("--disable-dev-shm-usage");
         chromeOptions.AddArgument("--disable-blink-features=AutomationControlled");
@@ -132,7 +136,10 @@ public class RuTrackerLoginService
                 {
                     minimalOptions.BinaryLocation = minimalChromePath;
                 }
+                if (!showBrowser)
+                {
                 minimalOptions.AddArgument("--headless=new");
+                }
                 minimalOptions.AddArgument("--no-sandbox");
                 minimalOptions.AddArgument("--disable-dev-shm-usage");
                 minimalOptions.AddArgument("--remote-debugging-port=9223");
@@ -308,12 +315,145 @@ public class RuTrackerLoginService
     }
 
     /// <summary>
+    /// Opens browser for manual login and extracts cookies after user completes login
+    /// </summary>
+    /// <returns>LoginResult with extracted cookies</returns>
+    public async Task<LoginResult> ManualLoginAsync()
+    {
+        ChromeDriver? driver = null;
+        
+        try
+        {
+            // Configure ChromeDriverService
+            var chromeDriverService = ChromeDriverService.CreateDefaultService();
+            chromeDriverService.HideCommandPromptWindow = true;
+            chromeDriverService.SuppressInitialDiagnosticInformation = true;
+            
+            var chromeOptions = new ChromeOptions();
+            
+            // Try to find Chrome in common locations
+            string chromePath = FindChromeExecutable();
+            if (!string.IsNullOrEmpty(chromePath))
+            {
+                chromeOptions.BinaryLocation = chromePath;
+            }
+            
+            // Always show browser for manual login (no headless mode)
+            chromeOptions.AddArgument("--no-sandbox");
+            chromeOptions.AddArgument("--disable-dev-shm-usage");
+            chromeOptions.AddArgument("--disable-blink-features=AutomationControlled");
+            chromeOptions.AddArgument("--window-size=1280,900");
+            chromeOptions.AddArgument("--disable-extensions");
+            chromeOptions.AddArgument("--disable-infobars");
+            chromeOptions.AddArgument("--remote-debugging-port=9224");
+            chromeOptions.AddExcludedArgument("enable-automation");
+            chromeOptions.AddAdditionalOption("useAutomationExtension", false);
+            chromeOptions.AddArgument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0");
+
+            driver = new ChromeDriver(chromeDriverService, chromeOptions);
+            
+            // Navigate to login page
+            driver.Navigate().GoToUrl($"{BaseUrl}/forum/login.php");
+            
+            // Wait for page to load
+            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(30));
+            wait.Until(d => 
+            {
+                try
+                {
+                    return ((IJavaScriptExecutor)d).ExecuteScript("return document.readyState").ToString() == "complete";
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+            
+            await Task.Delay(2000);
+            
+            // Show message box to user - they need to login manually
+            var result = System.Windows.MessageBox.Show(
+                "Please login to RuTracker in the browser window.\n\n" +
+                "After successfully logging in, click OK to extract your cookies.\n\n" +
+                "Click Cancel to abort the manual login process.",
+                "Manual Login",
+                System.Windows.MessageBoxButton.OKCancel,
+                System.Windows.MessageBoxImage.Information);
+            
+            if (result == System.Windows.MessageBoxResult.Cancel)
+            {
+                return new LoginResult
+                {
+                    Success = false,
+                    Cookies = new List<CookieData>(),
+                    StatusCode = System.Net.HttpStatusCode.RequestTimeout
+                };
+            }
+            
+            // Extract cookies after user confirms they've logged in
+            var cookies = new List<CookieData>();
+            var seleniumCookies = driver.Manage().Cookies.AllCookies;
+            
+            foreach (var cookie in seleniumCookies)
+            {
+                var isHttpOnly = cookie.Name == "bb_session";
+                
+                cookies.Add(new CookieData
+                {
+                    Name = cookie.Name,
+                    Value = cookie.Value,
+                    Domain = cookie.Domain,
+                    Path = cookie.Path ?? "/",
+                    Secure = cookie.Secure,
+                    HttpOnly = isHttpOnly,
+                    Expires = cookie.Expiry,
+                    Session = !cookie.Expiry.HasValue
+                });
+            }
+            
+            // Close browser
+            try
+            {
+                driver.Quit();
+                driver.Dispose();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Warning: Error closing browser: {ex.Message}");
+            }
+            
+            return new LoginResult
+            {
+                Success = cookies.Count > 0,
+                Cookies = cookies,
+                StatusCode = cookies.Count > 0 ? System.Net.HttpStatusCode.OK : System.Net.HttpStatusCode.Unauthorized
+            };
+        }
+        catch (Exception ex)
+        {
+            // Clean up driver if still open
+            try
+            {
+                driver?.Quit();
+                driver?.Dispose();
+            }
+            catch { }
+            
+            throw new Exception($"Failed to perform manual login: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
     /// Performs login and returns updated cookies
     /// </summary>
-    public async Task<LoginResult> LoginAsync(string username, string password, string redirect = "tracker.php?nm=")
+    /// <param name="username">RuTracker username</param>
+    /// <param name="password">RuTracker password</param>
+    /// <param name="redirect">Redirect URL after login</param>
+    /// <param name="showBrowser">If true, shows the browser window during login (false = headless mode)</param>
+    public async Task<LoginResult> LoginAsync(string username, string password, string redirect = "tracker.php?nm=", bool showBrowser = false)
     {
         // Step 1: Get cookies before login using Selenium
-        var (beforeCookies, chromeDriver) = await GetCookiesBeforeLoginAsync();
+        var (beforeCookies, chromeDriver) = await GetCookiesBeforeLoginAsync(showBrowser);
         
         // Step 2: Prepare login request
         var cookieContainer = new System.Net.CookieContainer();

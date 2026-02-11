@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:RuSkraping"
         xmlns:fa="http://schemas.fontawesome.io/icons/"
         mc:Ignorable="d"
-        Title="Details" Height="600" Width="800"
+        Title="Details" Height="700" Width="900"
         WindowStartupLocation="CenterScreen"
         Background="Transparent"
         BorderThickness="0"
@@ -70,6 +70,37 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
         </Style>
+
+        <!-- ScrollBar Style -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Track x:Name="PART_Track" IsDirectionReversed="true">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0"/>
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb>
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border CornerRadius="4" 
+                                                    Background="{StaticResource TextSecondaryBrush}" 
+                                                    Opacity="0.6"/>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0"/>
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border CornerRadius="16" Background="{StaticResource WindowBackgroundGradient}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
@@ -105,12 +136,28 @@
             </Border>
 
             <!-- Details Content -->
-            <ScrollViewer Grid.Row="1" Margin="20">
-                <TextBlock x:Name="DetailsTextBlock" 
-                          Foreground="{StaticResource TextPrimaryBrush}" 
-                          TextWrapping="Wrap"
-                          FontSize="14"
-                          LineHeight="24"/>
+            <ScrollViewer Grid.Row="1" Margin="20" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- Torrent Image -->
+                    <Border x:Name="ImageBorder" 
+                            CornerRadius="8" 
+                            Background="{StaticResource SecondaryBrush}"
+                            Margin="0,0,0,20"
+                            Visibility="Collapsed">
+                        <Image x:Name="TorrentImage" 
+                               Stretch="Uniform"
+                               MaxHeight="400"
+                               HorizontalAlignment="Center"/>
+                    </Border>
+                    
+                    <!-- Description Text -->
+                    <TextBlock x:Name="DetailsTextBlock" 
+                              Foreground="{StaticResource TextPrimaryBrush}" 
+                              TextWrapping="Wrap"
+                              FontSize="14"
+                              LineHeight="22"
+                              FontFamily="Consolas, Segoe UI"/>
+                </StackPanel>
             </ScrollViewer>
         </Grid>
     </Border>

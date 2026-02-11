@@ -18,6 +18,8 @@ public class TorrentSearchResult : INotifyPropertyChanged
     private string _date = string.Empty;
     private string _downloadUrl = string.Empty;
     private string _imageUrl = string.Empty;
+    private string _magnetUrl = string.Empty;
+    private string _description = string.Empty;
     private int _page;
 
     public string TopicId
@@ -146,6 +148,32 @@ public class TorrentSearchResult : INotifyPropertyChanged
             {
                 _imageUrl = value;
                 OnPropertyChanged(nameof(ImageUrl));
+            }
+        }
+    }
+
+    public string MagnetUrl
+    {
+        get => _magnetUrl;
+        set
+        {
+            if (_magnetUrl != value)
+            {
+                _magnetUrl = value;
+                OnPropertyChanged(nameof(MagnetUrl));
+            }
+        }
+    }
+
+    public string Description
+    {
+        get => _description;
+        set
+        {
+            if (_description != value)
+            {
+                _description = value;
+                OnPropertyChanged(nameof(Description));
             }
         }
     }
