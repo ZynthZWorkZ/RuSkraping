@@ -252,12 +252,12 @@
 
                 <StackPanel Grid.Row="7" Orientation="Vertical" VerticalAlignment="Bottom">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
-                        <Button x:Name="CancelButton" Click="CancelButton_Click" Margin="0,0,10,0" Padding="15,10">
-                            <TextBlock Text="Cancel"/>
-                        </Button>
-                        <Button x:Name="LoginButton" Click="LoginButton_Click" Padding="15,10">
-                            <StackPanel Orientation="Horizontal">
-                                <fa:FontAwesome Icon="SignIn" Margin="0,0,8,0"/>
+                    <Button x:Name="CancelButton" Click="CancelButton_Click" Margin="0,0,10,0" Padding="15,10">
+                        <TextBlock Text="Cancel"/>
+                    </Button>
+                    <Button x:Name="LoginButton" Click="LoginButton_Click" Padding="15,10">
+                        <StackPanel Orientation="Horizontal">
+                            <fa:FontAwesome Icon="SignIn" Margin="0,0,8,0"/>
                                 <TextBlock Text="Auto Login"/>
                             </StackPanel>
                         </Button>

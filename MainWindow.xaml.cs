@@ -879,6 +879,56 @@ Magnet: {(string.IsNullOrEmpty(selectedResult.MagnetUrl) ? "Not available" : sel
 
         return filePath;
     }
+
+    private void OpenDownloadManagerButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ErrorLogger.LogMessage("Opening Download Manager...", "INFO");
+            
+            // Check if Download Manager is already open
+            var existingManager = Application.Current.Windows.OfType<DownloadManager>().FirstOrDefault();
+            
+            if (existingManager != null)
+            {
+                ErrorLogger.LogMessage("Download Manager already open, activating...", "INFO");
+                // Activate existing window
+                existingManager.Activate();
+                existingManager.WindowState = WindowState.Normal;
+            }
+            else
+            {
+                ErrorLogger.LogMessage("Creating new Download Manager instance...", "INFO");
+                // Create new Download Manager window
+                var downloadManager = new DownloadManager();
+                
+                ErrorLogger.LogMessage("Showing Download Manager window...", "INFO");
+                downloadManager.Show();
+                
+                ErrorLogger.LogMessage("Download Manager opened successfully", "INFO");
+            }
+            
+            StatusText.Text = "Opened RUSKTorrent Manager";
+        }
+        catch (Exception ex)
+        {
+            ErrorLogger.LogException(ex, "Opening Download Manager");
+            var result = MessageBox.Show(
+                $"Failed to open Download Manager:\n\n{ex.Message}\n\n" +
+                $"Full error details logged to:\n{ErrorLogger.GetLogFilePath()}\n\n" +
+                $"Would you like to open the log file?",
+                "Error Opening Download Manager",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Error);
+            
+            if (result == MessageBoxResult.Yes)
+            {
+                ErrorLogger.OpenLogFile();
+            }
+            
+            StatusText.Text = "Failed to open Download Manager - check error log";
+        }
+    }
 }
 
 // SearchResult class removed - now using TorrentSearchResult from Models

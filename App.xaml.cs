@@ -1,6 +1,8 @@
-﻿using System.Configuration;
+﻿using System;
+using System.Configuration;
 using System.Data;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace RuSkraping;
 
@@ -12,6 +14,17 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Log application start
+        ErrorLogger.LogMessage("═══════════════════════════════════════════════════════", "INFO");
+        ErrorLogger.LogMessage("Application Starting", "INFO");
+        ErrorLogger.LogMessage($"Version: {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}", "INFO");
+        ErrorLogger.LogMessage($"OS: {Environment.OSVersion}", "INFO");
+        ErrorLogger.LogMessage($".NET: {Environment.Version}", "INFO");
+        ErrorLogger.LogMessage("═══════════════════════════════════════════════════════", "INFO");
+
+        // Setup global exception handlers
+        SetupExceptionHandlers();
 
         // Check if we have valid cookies
         if (!CookieStorage.HasValidCookies())
@@ -42,6 +55,60 @@ public partial class App : Application
             var mainWindow = new MainWindow();
             mainWindow.Show();
         }
+    }
+
+    private void SetupExceptionHandlers()
+    {
+        // Handle UI thread exceptions
+        DispatcherUnhandledException += App_DispatcherUnhandledException;
+
+        // Handle non-UI thread exceptions
+        AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+
+        // Handle task exceptions
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+
+        ErrorLogger.LogMessage("Exception handlers registered", "INFO");
+    }
+
+    private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        ErrorLogger.LogException(e.Exception, "UI Thread Exception");
+        
+        MessageBox.Show(
+            $"An error occurred:\n\n{e.Exception.Message}\n\n" +
+            $"Full details have been logged to:\n{ErrorLogger.GetLogFilePath()}\n\n" +
+            $"Click OK to continue or close the application.",
+            "Error",
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
+
+        // Mark as handled to prevent crash
+        e.Handled = true;
+    }
+
+    private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        if (e.ExceptionObject is Exception ex)
+        {
+            ErrorLogger.LogException(ex, "Non-UI Thread Exception (Critical)");
+            
+            MessageBox.Show(
+                $"A critical error occurred:\n\n{ex.Message}\n\n" +
+                $"Full details have been logged to:\n{ErrorLogger.GetLogFilePath()}\n\n" +
+                $"The application will now close.",
+                "Critical Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private void TaskScheduler_UnobservedTaskException(object? sender, System.Threading.Tasks.UnobservedTaskExceptionEventArgs e)
+    {
+        ErrorLogger.LogException(e.Exception, "Task Exception");
+        
+        // Mark as observed to prevent app crash
+        e.SetObserved();
     }
 }
 
