@@ -11,6 +11,7 @@ namespace RuSkraping.RUSKTorrent;
 /// <summary>
 /// Manages a TCP connection to a single peer.
 /// Handles handshake, message sending/receiving, and state management.
+/// All background tasks are fully self-contained — exceptions never escape unobserved.
 /// </summary>
 public class PeerConnection : IDisposable
 {
@@ -29,6 +30,8 @@ public class PeerConnection : IDisposable
     private readonly string _peerId;
     private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
     private CancellationTokenSource? _cts;
+    private readonly object _disconnectLock = new object();
+    private int _disconnected; // 0 = not disconnected, 1 = disconnected (for thread-safe Disconnect)
 
     public event EventHandler<PeerMessage>? MessageReceived;
     public event EventHandler? Disconnected;
@@ -79,8 +82,8 @@ public class PeerConnection : IDisposable
 
             ErrorLogger.LogMessage($"[PeerConnection] Incoming peer connected: {peerIp}:{peerPort}", "INFO");
 
-            // Start receiving messages
-            _ = Task.Run(() => peer.ReceiveMessagesAsync(peer._cts.Token));
+            // Start receiving messages — fully observed, exceptions never escape
+            _ = peer.ReceiveMessagesLoopAsync();
 
             return peer;
         }
@@ -99,7 +102,6 @@ public class PeerConnection : IDisposable
     {
         try
         {
-            ErrorLogger.LogMessage($"[PeerConnection] Connecting to {PeerIp}:{PeerPort}", "INFO");
             _client = new TcpClient();
             _cts = new CancellationTokenSource();
 
@@ -109,8 +111,10 @@ public class PeerConnection : IDisposable
             
             if (await Task.WhenAny(connectTask, timeoutTask) == timeoutTask)
             {
-                ErrorLogger.LogMessage($"[PeerConnection] Connection timeout to {PeerIp}:{PeerPort}", "WARN");
-                _client.Close();
+                // Timeout — close the client and observe the abandoned connect task
+                // so its exception doesn't become an UnobservedTaskException
+                try { _client.Close(); } catch { }
+                ObserveAndForget(connectTask);
                 return false;
             }
 
@@ -120,34 +124,28 @@ public class PeerConnection : IDisposable
             // Verify the client is actually connected
             if (!_client.Connected)
             {
-                ErrorLogger.LogMessage($"[PeerConnection] Connection failed to {PeerIp}:{PeerPort} (not connected)", "WARN");
-                _client.Close();
+                try { _client.Close(); } catch { }
                 return false;
             }
 
             _stream = _client.GetStream();
             IsConnected = true;
-            ErrorLogger.LogMessage($"[PeerConnection] TCP connected to {PeerIp}:{PeerPort}", "INFO");
 
             // Perform handshake
             bool handshakeSuccess = await PerformHandshakeAsync();
             if (!handshakeSuccess)
             {
-                ErrorLogger.LogMessage($"[PeerConnection] Handshake failed with {PeerIp}:{PeerPort}", "WARN");
                 Disconnect();
                 return false;
             }
 
-            ErrorLogger.LogMessage($"[PeerConnection] Handshake successful with {PeerIp}:{PeerPort}", "INFO");
-
-            // Start receiving messages
-            _ = Task.Run(() => ReceiveMessagesAsync(_cts.Token));
+            // Start receiving messages — fully observed, exceptions never escape
+            _ = ReceiveMessagesLoopAsync();
 
             return true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            ErrorLogger.LogException(ex, $"[PeerConnection] Connection error to {PeerIp}:{PeerPort}");
             Disconnect();
             return false;
         }
@@ -194,58 +192,71 @@ public class PeerConnection : IDisposable
         }
     }
 
-    private async Task ReceiveMessagesAsync(CancellationToken ct)
+    /// <summary>
+    /// Wrapper that ensures ReceiveMessagesAsync never throws an unobserved exception.
+    /// This is the method launched as a fire-and-forget task.
+    /// </summary>
+    private async Task ReceiveMessagesLoopAsync()
     {
         try
         {
-            while (!ct.IsCancellationRequested && IsConnected)
-            {
-                // Read message length (4 bytes, big-endian)
-                byte[] lengthBytes = new byte[4];
-                int bytesRead = await _stream!.ReadAsync(lengthBytes, 0, 4, ct);
-                if (bytesRead == 0)
-                {
-                    Disconnect();
-                    return;
-                }
-
-                int messageLength = (lengthBytes[0] << 24) | (lengthBytes[1] << 16) | (lengthBytes[2] << 8) | lengthBytes[3];
-
-                // Keep-alive message
-                if (messageLength == 0)
-                {
-                    continue;
-                }
-
-                // Read message payload
-                byte[] messageData = new byte[messageLength];
-                bytesRead = 0;
-                while (bytesRead < messageLength)
-                {
-                    int read = await _stream.ReadAsync(messageData, bytesRead, messageLength - bytesRead, ct);
-                    if (read == 0)
-                    {
-                        Disconnect();
-                        return;
-                    }
-                    bytesRead += read;
-                }
-
-                // Parse and handle message
-                var message = PeerMessage.Decode(messageData);
-                if (message != null)
-                {
-                    await HandleMessageAsync(message);
-                }
-            }
+            await ReceiveMessagesAsync(_cts?.Token ?? CancellationToken.None);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception)
+        {
+            // All exceptions are swallowed here — this is intentional.
+            // Network errors (SocketException, IOException, ObjectDisposedException,
+            // OperationCanceledException) are expected when a peer disconnects or
+            // when the CTS is cancelled. We MUST catch them all to prevent
+            // UnobservedTaskException / AggregateException in the finalizer.
+        }
+        finally
         {
             Disconnect();
         }
     }
 
-    private async Task HandleMessageAsync(PeerMessage message)
+    private async Task ReceiveMessagesAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested && IsConnected)
+        {
+            // Read message length (4 bytes, big-endian)
+            byte[] lengthBytes = new byte[4];
+            int bytesRead = await _stream!.ReadAsync(lengthBytes, 0, 4, ct);
+            if (bytesRead == 0)
+                return; // Peer closed connection gracefully
+
+            int messageLength = (lengthBytes[0] << 24) | (lengthBytes[1] << 16) | (lengthBytes[2] << 8) | lengthBytes[3];
+
+            // Keep-alive message
+            if (messageLength == 0)
+                continue;
+
+            // Sanity check — don't allocate absurd buffers
+            if (messageLength > 2 * 1024 * 1024) // 2 MB max (block = 16KB + overhead)
+                return;
+
+            // Read message payload
+            byte[] messageData = new byte[messageLength];
+            bytesRead = 0;
+            while (bytesRead < messageLength)
+            {
+                int read = await _stream.ReadAsync(messageData, bytesRead, messageLength - bytesRead, ct);
+                if (read == 0)
+                    return; // Peer closed connection
+                bytesRead += read;
+            }
+
+            // Parse and handle message
+            var message = PeerMessage.Decode(messageData);
+            if (message != null)
+            {
+                HandleMessage(message);
+            }
+        }
+    }
+
+    private void HandleMessage(PeerMessage message)
     {
         switch (message.Type)
         {
@@ -273,7 +284,6 @@ public class PeerConnection : IDisposable
 
         // Notify listeners
         MessageReceived?.Invoke(this, message);
-        await Task.CompletedTask;
     }
 
     /// <summary>
@@ -287,6 +297,10 @@ public class PeerConnection : IDisposable
         await _sendLock.WaitAsync();
         try
         {
+            // Re-check after acquiring lock — peer may have disconnected while waiting
+            if (!IsConnected || _stream == null)
+                throw new InvalidOperationException("Not connected");
+
             byte[] messageData = message.Encode();
             
             // Write message length (4 bytes, big-endian)
@@ -305,6 +319,22 @@ public class PeerConnection : IDisposable
             }
 
             await _stream.FlushAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Stream was disposed during write — treat as disconnect
+            Disconnect();
+            throw new InvalidOperationException("Not connected");
+        }
+        catch (IOException)
+        {
+            Disconnect();
+            throw;
+        }
+        catch (SocketException)
+        {
+            Disconnect();
+            throw;
         }
         finally
         {
@@ -335,24 +365,49 @@ public class PeerConnection : IDisposable
         await SendMessageAsync(request);
     }
 
+    /// <summary>
+    /// Thread-safe disconnect. Only the first caller does the actual cleanup.
+    /// </summary>
     public void Disconnect()
     {
-        if (!IsConnected)
+        // Atomic compare-and-swap: only the first caller proceeds
+        if (Interlocked.CompareExchange(ref _disconnected, 1, 0) != 0)
             return;
 
         IsConnected = false;
-        _cts?.Cancel();
-        _stream?.Close();
-        _client?.Close();
-        
-        Disconnected?.Invoke(this, EventArgs.Empty);
+
+        try { _cts?.Cancel(); } catch { }
+        try { _stream?.Close(); } catch { }
+        try { _client?.Close(); } catch { }
+
+        try { Disconnected?.Invoke(this, EventArgs.Empty); } catch { }
     }
 
     public void Dispose()
     {
         Disconnect();
-        _sendLock?.Dispose();
-        _cts?.Dispose();
+        try { _sendLock?.Dispose(); } catch { }
+        try { _cts?.Dispose(); } catch { }
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Observes a task's exception without awaiting it, preventing UnobservedTaskException.
+    /// Used for abandoned tasks (e.g. timed-out connect attempts).
+    /// </summary>
+    private static void ObserveAndForget(Task task)
+    {
+        if (task.IsCompleted)
+        {
+            // Already done — just touch the Exception property to observe it
+            _ = task.Exception;
+            return;
+        }
+
+        task.ContinueWith(
+            static t => { _ = t.Exception; },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }

@@ -105,10 +105,48 @@ public partial class App : Application
 
     private void TaskScheduler_UnobservedTaskException(object? sender, System.Threading.Tasks.UnobservedTaskExceptionEventArgs e)
     {
-        ErrorLogger.LogException(e.Exception, "Task Exception");
+        // Check if this is an expected network exception from the torrent engine
+        // (SocketException, IOException, ObjectDisposedException are normal during peer disconnect)
+        bool isExpectedNetworkError = IsExpectedNetworkException(e.Exception);
+
+        if (isExpectedNetworkError)
+        {
+            // Log at WARN level — these are expected and not actionable
+            ErrorLogger.LogMessage($"[TaskScheduler] Suppressed expected network exception: {e.Exception.InnerException?.Message ?? e.Exception.Message}", "WARN");
+        }
+        else
+        {
+            // Log at ERROR level — these are unexpected and should be investigated
+            ErrorLogger.LogException(e.Exception, "Unobserved Task Exception");
+        }
         
         // Mark as observed to prevent app crash
         e.SetObserved();
+    }
+
+    /// <summary>
+    /// Checks if an AggregateException contains only expected network exceptions
+    /// (SocketException, IOException, ObjectDisposedException, OperationCanceledException).
+    /// These are normal during peer disconnection/shutdown.
+    /// </summary>
+    private static bool IsExpectedNetworkException(AggregateException ex)
+    {
+        foreach (var inner in ex.InnerExceptions)
+        {
+            var actual = inner;
+            // Unwrap nested AggregateExceptions
+            while (actual is AggregateException agg && agg.InnerException != null)
+                actual = agg.InnerException;
+
+            if (actual is System.Net.Sockets.SocketException) continue;
+            if (actual is System.IO.IOException) continue;
+            if (actual is ObjectDisposedException) continue;
+            if (actual is OperationCanceledException) continue;
+            if (actual is System.Threading.Tasks.TaskCanceledException) continue;
+
+            return false; // Found a non-network exception
+        }
+        return true;
     }
 }
 

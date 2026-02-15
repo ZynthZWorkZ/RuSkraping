@@ -41,11 +41,14 @@ public class TorrentEngine : IDisposable
             Directory.CreateDirectory(_downloadDirectory);
         }
 
-        // Start the TCP listener for incoming peer connections
-        _ = StartListenerAsync();
+        // Start the TCP listener for incoming peer connections — fully observed
+        _ = StartListenerSafeAsync();
     }
 
-    private async Task StartListenerAsync()
+    /// <summary>
+    /// Safe wrapper — catches everything so the task never faults unobserved.
+    /// </summary>
+    private async Task StartListenerSafeAsync()
     {
         try
         {
@@ -66,27 +69,29 @@ public class TorrentEngine : IDisposable
 
     /// <summary>
     /// Handle incoming peer connections from the listener.
+    /// Uses async void because it's an event handler, but wraps everything in try-catch
+    /// to prevent any unhandled exception from crashing the app.
     /// </summary>
     private async void OnIncomingPeerHandshaked(TcpClient client, byte[] infoHash, string remotePeerId)
     {
-        string infoHashStr = BitConverter.ToString(infoHash).Replace("-", "").ToUpperInvariant();
-
-        // Find the matching torrent context
-        TorrentContext? context = null;
-        lock (_torrentContexts)
-        {
-            _torrentContexts.TryGetValue(infoHashStr, out context);
-        }
-
-        if (context == null)
-        {
-            ErrorLogger.LogMessage($"[TorrentEngine] Incoming peer for unknown torrent {infoHashStr.Substring(0, 8)}..., closing", "WARN");
-            try { client.Close(); } catch { }
-            return;
-        }
-
         try
         {
+            string infoHashStr = BitConverter.ToString(infoHash).Replace("-", "").ToUpperInvariant();
+
+            // Find the matching torrent context
+            TorrentContext? context = null;
+            lock (_torrentContexts)
+            {
+                _torrentContexts.TryGetValue(infoHashStr, out context);
+            }
+
+            if (context == null)
+            {
+                ErrorLogger.LogMessage($"[TorrentEngine] Incoming peer for unknown torrent {infoHashStr.Substring(0, 8)}..., closing", "WARN");
+                try { client.Close(); } catch { }
+                return;
+            }
+
             // Create a PeerConnection from the incoming TcpClient
             var peer = await PeerConnection.CreateFromIncomingAsync(client, infoHash, _peerId);
             if (peer != null)
@@ -256,10 +261,27 @@ public class TorrentEngine : IDisposable
             _torrentContexts[torrent.InfoHash] = context;
         }
 
-        // Start download in background
-        _ = Task.Run(() => DownloadTorrentAsync(context));
+        // Start download in background — fully observed
+        _ = DownloadTorrentSafeAsync(context);
 
         await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Safe wrapper — catches everything so the task never faults unobserved.
+    /// </summary>
+    private async Task DownloadTorrentSafeAsync(TorrentContext context)
+    {
+        try
+        {
+            await Task.Run(() => DownloadTorrentAsync(context));
+        }
+        catch (Exception ex)
+        {
+            // Already handled inside DownloadTorrentAsync, but just in case
+            if (ex is not OperationCanceledException)
+                ErrorLogger.LogMessage($"[TorrentEngine] Unhandled download error for {context.Torrent.Name}: {ex.Message}", "ERROR");
+        }
     }
 
     /// <summary>
@@ -294,13 +316,15 @@ public class TorrentEngine : IDisposable
 
         if (_torrentContexts.TryGetValue(torrent.InfoHash, out var context))
         {
-            context.CancellationTokenSource?.Cancel();
-            context.DiskManager?.Dispose();
+            try { context.CancellationTokenSource?.Cancel(); } catch { }
+            try { context.DiskManager?.Dispose(); } catch { }
             
             lock (context.PeerLock)
             {
                 foreach (var peer in context.Peers)
-                    peer.Dispose();
+                {
+                    try { peer.Dispose(); } catch { }
+                }
                 context.Peers.Clear();
             }
             
@@ -448,8 +472,8 @@ public class TorrentEngine : IDisposable
                 }
             }
 
-            // Step 5: Start re-announce loop in background (keeps finding new peers)
-            _ = Task.Run(() => ReAnnounceLoopAsync(context, ct), ct);
+            // Step 5: Start re-announce loop in background — fully observed
+            _ = ReAnnounceLoopSafeAsync(context, ct);
 
             // Step 6: Download pieces!
             await DownloadPiecesAsync(context, ct);
@@ -628,6 +652,22 @@ public class TorrentEngine : IDisposable
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Safe wrapper — catches everything so the task never faults unobserved.
+    /// </summary>
+    private async Task ReAnnounceLoopSafeAsync(TorrentContext context, CancellationToken ct)
+    {
+        try
+        {
+            await ReAnnounceLoopAsync(context, ct);
+        }
+        catch (OperationCanceledException) { /* Expected during shutdown */ }
+        catch (Exception ex)
+        {
+            ErrorLogger.LogMessage($"[TorrentEngine] Re-announce loop crashed: {ex.Message}", "WARN");
+        }
     }
 
     /// <summary>
@@ -1014,12 +1054,12 @@ public class TorrentEngine : IDisposable
         _disposed = true;
 
         // Stop listener
-        _peerListener?.Dispose();
+        try { _peerListener?.Dispose(); } catch { }
 
-        // Stop all torrents
+        // Stop all torrents — use try-catch on each to not lose others on failure
         foreach (var torrent in _activeTorrents.ToList())
         {
-            StopTorrentAsync(torrent).Wait();
+            try { StopTorrentAsync(torrent).Wait(TimeSpan.FromSeconds(5)); } catch { }
         }
 
         _activeTorrents.Clear();
