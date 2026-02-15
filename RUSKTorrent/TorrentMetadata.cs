@@ -127,6 +127,7 @@ public class TorrentMetadata
         }
 
         // Parse files (single-file vs multi-file mode)
+        long currentOffset = 0;
         if (info.ContainsKey("files"))
         {
             // Multi-file mode
@@ -153,6 +154,9 @@ public class TorrentMetadata
                             fileInfo.Path = string.Join(Path.DirectorySeparatorChar.ToString(), pathComponents);
                         }
 
+                        fileInfo.Offset = currentOffset;
+                        currentOffset += fileInfo.Length;
+
                         metadata.Files.Add(fileInfo);
                         metadata.TotalSize += fileInfo.Length;
                     }
@@ -165,7 +169,8 @@ public class TorrentMetadata
             var fileInfo = new TorrentFileInfo
             {
                 Path = metadata.Name,
-                Length = info["length"] is long length ? length : 0
+                Length = info["length"] is long length ? length : 0,
+                Offset = 0
             };
             metadata.Files.Add(fileInfo);
             metadata.TotalSize = fileInfo.Length;
@@ -181,12 +186,12 @@ public class TorrentMetadata
         if (infoStart < 0)
             throw new FormatException("Could not find info dictionary");
 
-        // Parse to find the end of the info dictionary
-        int position = infoStart;
-        BencodeParser.Parse(torrentData); // This validates the structure
+        // Use BencodeParser.SkipValue to correctly find the end of the info dictionary.
+        // This properly handles binary string data (like the 'pieces' field) that contains
+        // bytes like 'd', 'l', 'e' which would confuse a naive scanner.
+        int infoEnd = BencodeParser.SkipValue(torrentData, infoStart);
 
         // Extract just the info dictionary bytes
-        int infoEnd = FindInfoDictionaryEnd(torrentData, infoStart);
         byte[] infoBytes = new byte[infoEnd - infoStart];
         Array.Copy(torrentData, infoStart, infoBytes, 0, infoBytes.Length);
 
@@ -218,35 +223,26 @@ public class TorrentMetadata
         return -1;
     }
 
-    private static int FindInfoDictionaryEnd(byte[] data, int start)
-    {
-        int depth = 0;
-        int position = start;
-
-        while (position < data.Length)
-        {
-            byte current = data[position];
-
-            if (current == 'd' || current == 'l')
-            {
-                depth++;
-            }
-            else if (current == 'e')
-            {
-                if (depth == 0)
-                    return position + 1;
-                depth--;
-            }
-
-            position++;
-        }
-
-        throw new FormatException("Could not find end of info dictionary");
-    }
-
     public string GetInfoHashString()
     {
         return BitConverter.ToString(InfoHash).Replace("-", "").ToUpperInvariant();
+    }
+
+    public byte[] GetInfoHashBytes()
+    {
+        return InfoHash;
+    }
+
+    public List<byte[]> GetPieceHashes()
+    {
+        var hashes = new List<byte[]>();
+        for (int i = 0; i < Pieces.Length; i += 20)
+        {
+            byte[] hash = new byte[20];
+            Array.Copy(Pieces, i, hash, 0, 20);
+            hashes.Add(hash);
+        }
+        return hashes;
     }
 }
 
@@ -254,4 +250,5 @@ public class TorrentFileInfo
 {
     public string Path { get; set; } = string.Empty;
     public long Length { get; set; }
+    public long Offset { get; set; } // Byte offset within the torrent
 }

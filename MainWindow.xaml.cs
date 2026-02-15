@@ -349,10 +349,10 @@ public partial class MainWindow : Window
                 currentMagnetLink = magnetUrl;
                 Clipboard.SetText(currentMagnetLink);
                 StatusText.Text = "Magnet link copied to clipboard!";
-                OpenMagnetButton.IsEnabled = true;
-            }
-            else
-            {
+            OpenMagnetButton.IsEnabled = true;
+        }
+        else
+        {
                 MessageBox.Show("Could not find magnet link for this torrent.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 StatusText.Text = "No magnet link found.";
             }
@@ -651,11 +651,11 @@ Magnet: {(string.IsNullOrEmpty(selectedResult.MagnetUrl) ? "Not available" : sel
 
 {(string.IsNullOrEmpty(selectedResult.Description) ? "No description available." : selectedResult.Description)}";
 
-            // Show details in a new window on UI thread
-            var detailsWindow = new Details();
-            detailsWindow.Owner = this;
+        // Show details in a new window on UI thread
+        var detailsWindow = new Details();
+        detailsWindow.Owner = this;
             detailsWindow.SetDetailsWithImage(detailsText, selectedResult.ImageUrl);
-            detailsWindow.ShowDialog();
+        detailsWindow.ShowDialog();
             
             StatusText.Text = originalStatus;
         }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using RuSkraping.RUSKTorrent;
 
 namespace RuSkraping.Models;
 
@@ -150,6 +151,9 @@ public class TorrentDownload : INotifyPropertyChanged
 
     public ObservableCollection<Peer> Peers { get; set; } = new();
     public ObservableCollection<TorrentFile> Files { get; set; } = new();
+    
+    // Store torrent metadata for download operations
+    public TorrentMetadata? Metadata { get; set; }
 
     private void UpdateProgress()
     {

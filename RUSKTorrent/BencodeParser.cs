@@ -129,6 +129,76 @@ public static class BencodeParser
         return dict;
     }
 
+    /// <summary>
+    /// Advances past one complete bencode value starting at the given position.
+    /// Returns the position immediately after the value.
+    /// Unlike Parse(), this does NOT interpret the data — it just finds the exact byte boundaries.
+    /// Essential for extracting raw bencode bytes (e.g., info dictionary for SHA-1 hashing).
+    /// </summary>
+    public static int SkipValue(byte[] data, int position)
+    {
+        if (position >= data.Length)
+            throw new FormatException("Unexpected end of data at position " + position);
+
+        byte current = data[position];
+
+        // Integer: i<number>e
+        if (current == 'i')
+        {
+            position++; // Skip 'i'
+            while (position < data.Length && data[position] != 'e')
+                position++;
+            if (position >= data.Length)
+                throw new FormatException("Unterminated integer");
+            position++; // Skip 'e'
+            return position;
+        }
+
+        // List: l<values>e
+        if (current == 'l')
+        {
+            position++; // Skip 'l'
+            while (position < data.Length && data[position] != 'e')
+                position = SkipValue(data, position);
+            if (position >= data.Length)
+                throw new FormatException("Unterminated list");
+            position++; // Skip 'e'
+            return position;
+        }
+
+        // Dictionary: d<key-value pairs>e
+        if (current == 'd')
+        {
+            position++; // Skip 'd'
+            while (position < data.Length && data[position] != 'e')
+            {
+                position = SkipValue(data, position); // Skip key (always a string)
+                position = SkipValue(data, position); // Skip value
+            }
+            if (position >= data.Length)
+                throw new FormatException("Unterminated dictionary");
+            position++; // Skip 'e'
+            return position;
+        }
+
+        // String: <length>:<data>
+        if (current >= '0' && current <= '9')
+        {
+            int start = position;
+            while (position < data.Length && data[position] != ':')
+                position++;
+            if (position >= data.Length)
+                throw new FormatException("Invalid string length prefix");
+            string lengthStr = Encoding.UTF8.GetString(data, start, position - start);
+            int length = int.Parse(lengthStr);
+            position++; // Skip ':'
+            position += length; // Skip the string data (correctly handles binary data!)
+            return position;
+        }
+
+        throw new FormatException($"Invalid bencode at position {position} (byte: 0x{current:X2})");
+    }
+
     // Encoding methods for creating bencode data
     public static byte[] Encode(object? obj)
     {

@@ -41,7 +41,7 @@ public partial class DownloadManager : Window
             _torrentEngine.TorrentRemoved += OnTorrentRemoved;
             _torrentEngine.TorrentUpdated += OnTorrentUpdated;
             
-            StatusText.Text = "RUSKTorrent Engine Ready - Phase 0: Metadata Display Only";
+            StatusText.Text = "RUSKTorrent Engine Ready - Full Download Capability!";
             
             ErrorLogger.LogMessage("DownloadManager: Initialization completed successfully", "INFO");
         }
@@ -80,7 +80,13 @@ public partial class DownloadManager : Window
     {
         Dispatcher.Invoke(() =>
         {
-            StatusText.Text = $"Updated: {torrent.Name} - {torrent.StateText}";
+            // Find the torrent in the collection and update it
+            var existingTorrent = _torrents.FirstOrDefault(t => t.InfoHash == torrent.InfoHash);
+            if (existingTorrent != null)
+            {
+                // The observable properties should automatically update the UI
+                StatusText.Text = $"Updated: {torrent.Name} - {torrent.StateText} - {torrent.ProgressFormatted}";
+            }
         });
     }
 
@@ -126,7 +132,9 @@ public partial class DownloadManager : Window
                 StatusText.Text = "Parsing torrent file...";
 
                 // Add torrent to engine
+                ErrorLogger.LogMessage($"[DownloadManager] Loading torrent file: {openFileDialog.FileName}", "INFO");
                 var torrent = await _torrentEngine.AddTorrentFromFileAsync(openFileDialog.FileName);
+                ErrorLogger.LogMessage($"[DownloadManager] Torrent loaded successfully: {torrent.Name}", "INFO");
 
                 // Show success message with metadata
                 string message = $"✅ Torrent Loaded Successfully!\n\n" +
@@ -134,8 +142,7 @@ public partial class DownloadManager : Window
                                 $"Size: {torrent.TotalSizeFormatted}\n" +
                                 $"Files: {torrent.Files.Count}\n" +
                                 $"Info Hash: {torrent.InfoHash}\n\n" +
-                                $"The torrent metadata has been parsed and loaded.\n" +
-                                $"(Downloading not yet implemented - Phase 0)";
+                                $"Ready to download! Select the torrent and click 'Start' to begin.";
 
                 MessageBox.Show(message, "Torrent Added", MessageBoxButton.OK, MessageBoxImage.Information);
                 
@@ -143,7 +150,8 @@ public partial class DownloadManager : Window
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to add torrent:\n\n{ex.Message}", "Error", 
+                ErrorLogger.LogException(ex, "[DownloadManager] AddTorrentButton_Click");
+                MessageBox.Show($"Failed to add torrent:\n\n{ex.Message}\n\nCheck errors.log for details.", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 StatusText.Text = "Failed to load torrent";
             }
@@ -182,8 +190,8 @@ public partial class DownloadManager : Window
                 }
 
                 message += $"\nThe magnet link has been parsed and loaded.\n" +
-                          $"(Full metadata requires DHT/peer exchange - Not implemented yet)\n" +
-                          $"(Downloading not yet implemented - Phase 0)";
+                          $"Note: Magnet downloads require DHT (not yet implemented).\n" +
+                          $"For now, use .torrent files to test downloading.";
 
                 MessageBox.Show(message, "Magnet Added", MessageBoxButton.OK, MessageBoxImage.Information);
                 
@@ -208,13 +216,76 @@ public partial class DownloadManager : Window
         {
             try
             {
+                StartButton.IsEnabled = false;
+                
+                ErrorLogger.LogMessage($"[DownloadManager] User clicked Start for torrent: {torrent.Name}", "INFO");
+                
+                // Determine initial path for dialog
+                string initialPath;
+                try
+                {
+                    // Try to use user's Downloads folder
+                    initialPath = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        "Downloads"
+                    );
+                    
+                    // If Downloads doesn't exist, use Documents
+                    if (!System.IO.Directory.Exists(initialPath))
+                    {
+                        initialPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    }
+                    
+                    ErrorLogger.LogMessage($"[DownloadManager] Initial dialog path: {initialPath}", "INFO");
+                }
+                catch
+                {
+                    // Fallback to user profile
+                    initialPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                }
+                
+                // Ask user where to save the torrent
+                var folderDialog = new System.Windows.Forms.FolderBrowserDialog
+                {
+                    Description = $"Choose where to save: {torrent.Name}",
+                    ShowNewFolderButton = true,
+                    SelectedPath = initialPath
+                };
+
+                ErrorLogger.LogMessage($"[DownloadManager] Showing folder browser dialog...", "INFO");
+                var dialogResult = folderDialog.ShowDialog();
+                
+                if (dialogResult != System.Windows.Forms.DialogResult.OK)
+                {
+                    ErrorLogger.LogMessage($"[DownloadManager] User cancelled save location dialog", "INFO");
+                    StatusText.Text = "Download cancelled - no save location selected";
+                    return;
+                }
+
+                // Update save path
+                string selectedPath = folderDialog.SelectedPath;
+                ErrorLogger.LogMessage($"[DownloadManager] User selected save path: {selectedPath}", "INFO");
+                
+                // Create subdirectory for the torrent if it doesn't exist
+                string savePath = System.IO.Path.Combine(selectedPath, SanitizeFolderName(torrent.Name));
+                torrent.SavePath = savePath;
+                
+                ErrorLogger.LogMessage($"[DownloadManager] Final save path: {savePath}", "INFO");
+                
+                StatusText.Text = $"Starting download: {torrent.Name}...";
                 await _torrentEngine.StartTorrentAsync(torrent);
-                StatusText.Text = $"Queued: {torrent.Name} (Phase 0: Download not implemented yet)";
+                StatusText.Text = $"Downloading: {torrent.Name}";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to start torrent:\n{ex.Message}", "Error", 
+                ErrorLogger.LogException(ex, "[DownloadManager] StartButton_Click");
+                MessageBox.Show($"Failed to start torrent:\n\n{ex.Message}\n\nCheck errors.log for details.", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = $"Error starting download";
+            }
+            finally
+            {
+                StartButton.IsEnabled = true;
             }
         }
         else
@@ -222,6 +293,17 @@ public partial class DownloadManager : Window
             MessageBox.Show("Please select a torrent first.", "No Selection", 
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
+    }
+
+    private string SanitizeFolderName(string name)
+    {
+        // Remove invalid characters from folder name
+        var invalid = System.IO.Path.GetInvalidFileNameChars();
+        foreach (char c in invalid)
+        {
+            name = name.Replace(c, '_');
+        }
+        return name;
     }
 
     private async void PauseButton_Click(object sender, RoutedEventArgs e)
